@@ -1,9 +1,18 @@
 const fs = require('fs');
 const path = require('path');
 
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const logsDir = path.join(__dirname, '..', 'logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+let fileLoggingEnabled = !isServerless;
+
+if (fileLoggingEnabled) {
+  try {
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+  } catch {
+    fileLoggingEnabled = false;
+  }
 }
 
 const appLogPath = path.join(logsDir, 'app.log');
@@ -23,6 +32,7 @@ function formatEntry(level, message, meta) {
 }
 
 function appendSafe(filePath, line) {
+  if (!fileLoggingEnabled) return;
   try {
     fs.appendFileSync(filePath, line, 'utf8');
   } catch {

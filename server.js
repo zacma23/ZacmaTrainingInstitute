@@ -91,6 +91,25 @@ app.use('/api/admin', userRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api', courseRoutes);
 
+// Vercel Cron / External Scheduler endpoint for automated reminder checks
+app.get('/api/cron/reminders', async (req, res) => {
+  const cronSecret = (process.env.CRON_SECRET || '').trim();
+  if (cronSecret) {
+    const authHeader = req.headers.authorization || '';
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized cron invocation.' });
+    }
+  }
+  try {
+    await ensureInitialized();
+    const result = await runReminderCheck();
+    return res.json({ ok: true, result });
+  } catch (err) {
+    logger.error('Cron reminder check failed', { error: err.message });
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Static Frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -114,22 +133,38 @@ app.use((err, req, res, _next) => {
   });
 });
 
+let initPromise = null;
+
+async function ensureInitialized() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      await initDatabase();
+      await ensureBaselineCatalog();
+    })().catch((err) => {
+      initPromise = null;
+      throw err;
+    });
+  }
+  return initPromise;
+}
+
 async function bootstrap() {
   try {
-    await initDatabase();
-    await ensureBaselineCatalog();
+    await ensureInitialized();
     await runReminderCheck();
 
-    // Run automated payment reminder check every hour in Africa/Addis_Ababa timezone
-    cron.schedule(
-      '0 * * * *',
-      () => {
-        runReminderCheck().catch((err) =>
-          logger.error('Scheduled reminder check failed', { error: err.message })
-        );
-      },
-      { timezone: 'Africa/Addis_Ababa' }
-    );
+    // Run automated payment reminder check every hour in Africa/Addis_Ababa timezone (non-serverless only)
+    if (!process.env.VERCEL) {
+      cron.schedule(
+        '0 * * * *',
+        () => {
+          runReminderCheck().catch((err) =>
+            logger.error('Scheduled reminder check failed', { error: err.message })
+          );
+        },
+        { timezone: 'Africa/Addis_Ababa' }
+      );
+    }
 
     app.listen(PORT, HOST, () => {
       logger.info(`BirrLedger Student Fee Management System listening on http://${HOST}:${PORT}`, {
@@ -143,4 +178,12 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+if (require.main === module) {
+  bootstrap();
+}
+
+module.exports = {
+  app,
+  ensureInitialized,
+  bootstrap,
+};

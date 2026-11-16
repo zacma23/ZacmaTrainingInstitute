@@ -1,9 +1,36 @@
 # Production Deployment Guide — BirrLedger Student Fee Management System
 
-## 1. Hosting Environment Compatibility
+## Option A: Hosting on Vercel (Recommended Cloud Deployment)
+
+This repository includes `api/index.js` and `vercel.json` configured for **Vercel Serverless Functions + Edge Static CDN**.
+
+1. **Managed Cloud MySQL Database**:
+   Vercel serverless functions require an externally reachable MySQL/MariaDB server (e.g., **TiDB Cloud Serverless**, **Aiven**, **Railway**, **AWS RDS**, or **DigitalOcean Managed MySQL**).
+   - Either set `DATABASE_URL` (e.g. `mysql://user:pass@host:4000/sfmt_ethiopia?ssl-mode=REQUIRED`)
+   - Or set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSL=true` (plus `DB_SSL_CA` if your provider requires a custom CA certificate).
+   - On first API request, `api/index.js` automatically applies `sql/schema.sql`, runs schema upgrades, and seeds baseline roles/courses/plans. After initial provisioning, you can optionally set `DB_SKIP_SCHEMA_SYNC=true` for faster cold starts.
+
+2. **Required Vercel Environment Variables**:
+   - `DATABASE_URL` (or `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`)
+   - `JWT_SECRET` (generate with `openssl rand -hex 32`)
+   - `NODE_ENV=production`
+   - `TZ=Africa/Addis_Ababa`
+   - `GEMINI_API_KEY` (required if using the Operations & Fee Assistant chatbot)
+   - `CRON_SECRET` (optional bearer token protecting `GET /api/cron/reminders`)
+   - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional Firebase Admin JSON or base64 string)
+
+3. **Firebase Google Sign-In Domain Allowlist**:
+   Add your deployed Vercel domain (`your-app.vercel.app`) in **Firebase Console → Authentication → Settings → Authorized domains**.
+
+4. **Automated Reminders on Vercel**:
+   External/Vercel Cron can call `GET https://your-app.vercel.app/api/cron/reminders` daily with header `Authorization: Bearer <CRON_SECRET>`.
+
+---
+
+## Option B: Linux VPS / Self-Hosted Hosting
 This application requires **Node.js 20+**, **MySQL 8.0+ / MariaDB 10.6+**, and a persistent process manager (**PM2**).
 - **Recommended:** Ubuntu 22.04/24.04 or Debian 12 VPS (DigitalOcean, Hetzner, AWS EC2, Ethio Telecom Cloud, or on-premise institute server).
-- **Important Note on Shared cPanel Hosting:** Standard shared cPanel hosting often restricts long-lived Node.js processes, `node-cron` background timers, outbound messaging webhooks, or `mysql2` connection pooling. Verify that your hosting plan explicitly supports **Node.js App Manager (Passenger) or SSH/PM2 access** before deploying on cPanel; otherwise deploy on a Linux VPS.
+- **Important Note on Shared cPanel Hosting:** Standard shared cPanel hosting often restricts long-lived Node.js processes, `node-cron` background timers, outbound messaging webhooks, or `mysql2` connection pooling. Verify that your hosting plan explicitly supports **Node.js App Manager (Passenger) or SSH/PM2 access** before deploying on cPanel; otherwise deploy on Vercel or a Linux VPS.
 
 ## 2. Server Preparation (Ubuntu / Debian VPS)
 ```bash

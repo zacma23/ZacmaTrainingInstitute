@@ -18,18 +18,36 @@ esbuild.buildSync({
   minify: true,
 });
 
-// 2. Verify critical runtime files exist
+// 2. Copy local UMD vendor bundles into public/vendor/ for static hosting (Vercel CDN)
+const vendorDir = path.join(rootDir, 'public', 'vendor');
+fs.mkdirSync(vendorDir, { recursive: true });
+const vendorFiles = [
+  ['node_modules/chart.js/dist/chart.umd.min.js', 'chart.umd.min.js'],
+  ['node_modules/lucide/dist/umd/lucide.min.js', 'lucide.min.js'],
+  ['node_modules/jspdf/dist/jspdf.umd.min.js', 'jspdf.umd.min.js'],
+];
+for (const [srcRel, destName] of vendorFiles) {
+  const srcPath = path.join(rootDir, srcRel);
+  if (!fs.existsSync(srcPath)) {
+    throw new Error(`Missing required vendor asset: ${srcRel}`);
+  }
+  fs.copyFileSync(srcPath, path.join(vendorDir, destName));
+}
+
+// 3. Verify critical runtime files exist
 const requiredPaths = [
   'server.js',
+  'api/index.js',
+  'vercel.json',
   'sql/schema.sql',
   'config/db.js',
   'public/index.html',
   'public/styles.css',
   'public/app.js',
   'public/js/firebase-bundle.js',
-  'node_modules/chart.js/dist/chart.umd.min.js',
-  'node_modules/lucide/dist/umd/lucide.min.js',
-  'node_modules/jspdf/dist/jspdf.umd.min.js',
+  'public/vendor/chart.umd.min.js',
+  'public/vendor/lucide.min.js',
+  'public/vendor/jspdf.umd.min.js',
 ];
 
 for (const rel of requiredPaths) {
@@ -39,9 +57,9 @@ for (const rel of requiredPaths) {
   }
 }
 
-// 3. Copy static public assets into dist/public for production static deployment verification
+// 4. Copy static public assets into dist/public for production static deployment verification
 fs.rmSync(distDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(distDir, 'public'), { recursive: true });
 fs.cpSync(path.join(rootDir, 'public'), path.join(distDir, 'public'), { recursive: true });
 
-console.log('Production verification build completed cleanly -> dist/public');
+console.log('Production verification build completed cleanly -> public/vendor & dist/public');

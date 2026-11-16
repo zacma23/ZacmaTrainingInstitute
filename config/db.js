@@ -6,18 +6,73 @@ const logger = require('./logger');
 
 let pool = null;
 
+function resolveSslOption(urlSslMode) {
+  const rawSsl = String(process.env.DB_SSL || urlSslMode || '').trim().toLowerCase();
+  const rawCa = (process.env.DB_SSL_CA || '').trim();
+
+  if (!rawSsl && !rawCa) {
+    return undefined;
+  }
+  if (rawSsl === 'false' || rawSsl === '0' || rawSsl === 'disable' || rawSsl === 'disabled') {
+    return undefined;
+  }
+
+  const sslObj = {
+    minVersion: 'TLSv1.2',
+    rejectUnauthorized: rawSsl !== 'skip-verify' && rawSsl !== 'no-verify' && rawSsl !== 'allow-self-signed',
+  };
+
+  if (rawCa) {
+    if (rawCa.includes('BEGIN CERTIFICATE')) {
+      sslObj.ca = rawCa.replace(/\\n/g, '\n');
+    } else {
+      try {
+        sslObj.ca = Buffer.from(rawCa, 'base64').toString('utf8');
+      } catch {
+        sslObj.ca = rawCa;
+      }
+    }
+  }
+
+  return sslObj;
+}
+
 function getDbConfig() {
+  const rawUrl = (process.env.DATABASE_URL || process.env.MYSQL_URL || '').trim();
+  const defaultLimit = process.env.VERCEL ? '3' : '10';
+
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      const urlSsl = parsed.searchParams.get('ssl-mode') || parsed.searchParams.get('sslmode') || parsed.searchParams.get('ssl') || '';
+      const dbName = parsed.pathname ? decodeURIComponent(parsed.pathname.replace(/^\//, '')) : '';
+      return {
+        host: parsed.hostname || '127.0.0.1',
+        port: parseInt(parsed.port || '3306', 10),
+        user: decodeURIComponent(parsed.username || 'root'),
+        password: decodeURIComponent(parsed.password || ''),
+        database: dbName || process.env.DB_NAME || 'sfmt_ethiopia',
+        connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || defaultLimit, 10),
+        ssl: resolveSslOption(urlSsl),
+      };
+    } catch (err) {
+      logger.warn('Failed to parse DATABASE_URL/MYSQL_URL; falling back to DB_* variables', { error: err.message });
+    }
+  }
+
   return {
     host: process.env.DB_HOST || '127.0.0.1',
     port: parseInt(process.env.DB_PORT || '3306', 10),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'sfmt_ethiopia',
-    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || '10', 10),
+    connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || defaultLimit, 10),
+    ssl: resolveSslOption(''),
   };
 }
 
 function ensureLocalMariaDbRunning(host) {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return;
   if (host !== '127.0.0.1' && host !== 'localhost') return;
   try {
     execSync('pgrep -x mariadbd || pgrep -x mysqld', { stdio: 'ignore' });
@@ -31,42 +86,77 @@ function ensureLocalMariaDbRunning(host) {
   }
 }
 
+async function applySchemaAndUpgrades(conn, database) {
+  const schemaPath = path.join(__dirname, '..', 'sql', 'schema.sql');
+  const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+  const filteredSql = schemaSql
+    .replace(/CREATE\s+DATABASE[\s\S]*?;/gi, '')
+    .replace(/USE\s+`?[^`;]+`?\s*;/gi, '');
+
+  await conn.query(filteredSql);
+  await ensureSchemaUpgrades(conn, database);
+}
+
 async function initDatabase() {
+  if (pool) {
+    return pool;
+  }
+
   const cfg = getDbConfig();
   if (!cfg.user) {
-    throw new Error('DB_USER is not configured in environment variables.');
+    throw new Error('DB_USER (or DATABASE_URL) is not configured in environment variables.');
   }
 
   ensureLocalMariaDbRunning(cfg.host);
 
-  // 1. Connect without database to ensure target database exists
-  const bootstrapConn = await mysql.createConnection({
-    host: cfg.host,
-    port: cfg.port,
-    user: cfg.user,
-    password: cfg.password,
-    multipleStatements: true,
-    timezone: '+03:00',
-  });
+  const skipSchemaSync = String(process.env.DB_SKIP_SCHEMA_SYNC || '').toLowerCase() === 'true';
 
-  try {
-    await bootstrapConn.query(
-      `CREATE DATABASE IF NOT EXISTS \`${cfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-    );
-    await bootstrapConn.query(`USE \`${cfg.database}\``);
+  if (!skipSchemaSync) {
+    const baseConnOpts = {
+      host: cfg.host,
+      port: cfg.port,
+      user: cfg.user,
+      password: cfg.password,
+      multipleStatements: true,
+      timezone: '+03:00',
+      ...(cfg.ssl ? { ssl: cfg.ssl } : {}),
+    };
 
-    // Execute schema DDL statements safely (skip CREATE DATABASE / USE lines to honor configured DB_NAME)
-    const schemaPath = path.join(__dirname, '..', 'sql', 'schema.sql');
-    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    const filteredSql = schemaSql
-      .replace(/CREATE\s+DATABASE[\s\S]*?;/gi, '')
-      .replace(/USE\s+`?[^`;]+`?\s*;/gi, '');
-
-    await bootstrapConn.query(filteredSql);
-    await ensureSchemaUpgrades(bootstrapConn, cfg.database);
-    logger.info('MySQL database and schema verified', { database: cfg.database, host: cfg.host });
-  } finally {
-    await bootstrapConn.end();
+    // 1. Try connecting at server level to create the database if needed;
+    //    if managed cloud MySQL denies server-level CREATE DATABASE, connect directly to cfg.database.
+    let bootstrapConn = null;
+    try {
+      bootstrapConn = await mysql.createConnection(baseConnOpts);
+      await bootstrapConn.query(
+        `CREATE DATABASE IF NOT EXISTS \`${cfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      );
+      await bootstrapConn.query(`USE \`${cfg.database}\``);
+      await applySchemaAndUpgrades(bootstrapConn, cfg.database);
+      logger.info('MySQL database and schema verified', { database: cfg.database, host: cfg.host });
+    } catch (serverLevelErr) {
+      if (bootstrapConn) {
+        await bootstrapConn.end().catch(() => {});
+        bootstrapConn = null;
+      }
+      logger.warn('Server-level CREATE DATABASE skipped; connecting directly to target database', {
+        database: cfg.database,
+        reason: serverLevelErr.message,
+      });
+      const directConn = await mysql.createConnection({
+        ...baseConnOpts,
+        database: cfg.database,
+      });
+      try {
+        await applySchemaAndUpgrades(directConn, cfg.database);
+        logger.info('MySQL schema verified on pre-provisioned database', { database: cfg.database, host: cfg.host });
+      } finally {
+        await directConn.end();
+      }
+    } finally {
+      if (bootstrapConn) {
+        await bootstrapConn.end().catch(() => {});
+      }
+    }
   }
 
   // 2. Create connection pool bound to target database
@@ -79,9 +169,12 @@ async function initDatabase() {
     waitForConnections: true,
     connectionLimit: cfg.connectionLimit,
     queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
     dateStrings: ['DATE'],
     decimalNumbers: true,
     timezone: '+03:00',
+    ...(cfg.ssl ? { ssl: cfg.ssl } : {}),
   });
 
   // Verify pool connectivity

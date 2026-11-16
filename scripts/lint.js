@@ -10,7 +10,7 @@ function collectJs(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (['node_modules', '.git', 'dist', 'logs', 'data'].includes(entry.name)) continue;
+      if (['node_modules', '.git', 'dist', 'logs', 'data', 'vendor', '.vercel'].includes(entry.name)) continue;
       collectJs(full);
     } else if (entry.name.endsWith('.js')) {
       filesToCheck.push(full);
