@@ -87,14 +87,50 @@ function ensureLocalMariaDbRunning(host) {
 }
 
 async function applySchemaAndUpgrades(conn, database) {
-  const schemaPath = path.join(__dirname, '..', 'sql', 'schema.sql');
-  const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-  const filteredSql = schemaSql
-    .replace(/CREATE\s+DATABASE[\s\S]*?;/gi, '')
-    .replace(/USE\s+`?[^`;]+`?\s*;/gi, '');
+  const [[tablesRow]] = await conn.query(
+    `SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ('users', 'settings', 'notifications', 'audit_logs')`,
+    [database]
+  );
 
-  await conn.query(filteredSql);
-  await ensureSchemaUpgrades(conn, database);
+  if (Number(tablesRow.cnt) < 4) {
+    const schemaPath = path.join(__dirname, '..', 'sql', 'schema.sql');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    const filteredSql = schemaSql
+      .replace(/CREATE\s+DATABASE[\s\S]*?;/gi, '')
+      .replace(/USE\s+`?[^`;]+`?\s*;/gi, '');
+
+    await conn.query(filteredSql);
+  }
+
+  // Only run incremental column/enum upgrades if a newer column or enum is missing
+  const [[upgradeMarker]] = await conn.query(
+    `SELECT
+       (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'notifications' AND COLUMN_NAME = 'type' AND COLUMN_TYPE LIKE '%STUDENT_MESSAGE%') AS hasSmsEnum,
+       (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'students' AND COLUMN_NAME = 'nationalIdNumber') AS hasStudentNid,
+       (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'registration_applications' AND COLUMN_NAME = 'nationalIdNumber') AS hasAppNid`,
+    [database, database, database]
+  );
+  if (
+    Number(upgradeMarker.hasSmsEnum) === 0 ||
+    Number(upgradeMarker.hasStudentNid) === 0 ||
+    Number(upgradeMarker.hasAppNid) === 0 ||
+    Number(tablesRow.cnt) < 4
+  ) {
+    await ensureSchemaUpgrades(conn, database);
+  }
+}
+
+function isSecureTransportError(err) {
+  const msg = String((err && err.message) || '').toLowerCase();
+  return (
+    (err && (err.errno === 3159 || err.code === 'ER_SECURE_TRANSPORT_REQUIRED')) ||
+    msg.includes('secure transport') ||
+    msg.includes('connections using insecure transport')
+  );
 }
 
 async function initDatabase() {
@@ -103,6 +139,15 @@ async function initDatabase() {
   }
 
   const cfg = getDbConfig();
+  const isLocalHost = cfg.host === '127.0.0.1' || cfg.host === 'localhost';
+  if ((process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) && isLocalHost) {
+    const err = new Error(
+      'No external MySQL database is configured for Vercel. Set DATABASE_URL (or DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_SSL) in Vercel Project Settings → Environment Variables.'
+    );
+    err.code = 'MISSING_VERCEL_DB_CONFIG';
+    throw err;
+  }
+
   if (!cfg.user) {
     throw new Error('DB_USER (or DATABASE_URL) is not configured in environment variables.');
   }
@@ -112,49 +157,96 @@ async function initDatabase() {
   const skipSchemaSync = String(process.env.DB_SKIP_SCHEMA_SYNC || '').toLowerCase() === 'true';
 
   if (!skipSchemaSync) {
-    const baseConnOpts = {
+    const buildConnOpts = (withDatabase) => ({
       host: cfg.host,
       port: cfg.port,
       user: cfg.user,
       password: cfg.password,
+      ...(withDatabase ? { database: cfg.database } : {}),
       multipleStatements: true,
+      connectTimeout: 10000,
       timezone: '+03:00',
       ...(cfg.ssl ? { ssl: cfg.ssl } : {}),
+    });
+
+    const connectWithAutoSsl = async (withDatabase) => {
+      try {
+        return await mysql.createConnection(buildConnOpts(withDatabase));
+      } catch (err) {
+        if (!cfg.ssl && !isLocalHost && isSecureTransportError(err)) {
+          cfg.ssl = { minVersion: 'TLSv1.2', rejectUnauthorized: true };
+          logger.info('Remote cloud MySQL requires TLS; retrying connection with SSL enabled', { host: cfg.host });
+          return await mysql.createConnection(buildConnOpts(withDatabase));
+        }
+        throw err;
+      }
     };
 
-    // 1. Try connecting at server level to create the database if needed;
-    //    if managed cloud MySQL denies server-level CREATE DATABASE, connect directly to cfg.database.
-    let bootstrapConn = null;
-    try {
-      bootstrapConn = await mysql.createConnection(baseConnOpts);
-      await bootstrapConn.query(
-        `CREATE DATABASE IF NOT EXISTS \`${cfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-      );
-      await bootstrapConn.query(`USE \`${cfg.database}\``);
-      await applySchemaAndUpgrades(bootstrapConn, cfg.database);
-      logger.info('MySQL database and schema verified', { database: cfg.database, host: cfg.host });
-    } catch (serverLevelErr) {
-      if (bootstrapConn) {
-        await bootstrapConn.end().catch(() => {});
-        bootstrapConn = null;
-      }
-      logger.warn('Server-level CREATE DATABASE skipped; connecting directly to target database', {
-        database: cfg.database,
-        reason: serverLevelErr.message,
-      });
-      const directConn = await mysql.createConnection({
-        ...baseConnOpts,
-        database: cfg.database,
-      });
+    const preferDirect = Boolean(
+      cfg.database && (process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.VERCEL)
+    );
+
+    if (preferDirect) {
+      let directConn = null;
       try {
+        directConn = await connectWithAutoSsl(true);
         await applySchemaAndUpgrades(directConn, cfg.database);
-        logger.info('MySQL schema verified on pre-provisioned database', { database: cfg.database, host: cfg.host });
+        logger.info('MySQL schema verified on target database', { database: cfg.database, host: cfg.host });
+      } catch (directErr) {
+        if (directConn) {
+          await directConn.end().catch(() => {});
+          directConn = null;
+        }
+        if (directErr && directErr.code === 'ER_BAD_DB_ERROR') {
+          const bootstrapConn = await connectWithAutoSsl(false);
+          try {
+            await bootstrapConn.query(
+              `CREATE DATABASE IF NOT EXISTS \`${cfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+            );
+            await bootstrapConn.query(`USE \`${cfg.database}\``);
+            await applySchemaAndUpgrades(bootstrapConn, cfg.database);
+            logger.info('MySQL database created and schema verified', { database: cfg.database, host: cfg.host });
+          } finally {
+            await bootstrapConn.end().catch(() => {});
+          }
+        } else {
+          throw directErr;
+        }
       } finally {
-        await directConn.end();
+        if (directConn) {
+          await directConn.end().catch(() => {});
+        }
       }
-    } finally {
-      if (bootstrapConn) {
-        await bootstrapConn.end().catch(() => {});
+    } else {
+      let bootstrapConn = null;
+      try {
+        bootstrapConn = await connectWithAutoSsl(false);
+        await bootstrapConn.query(
+          `CREATE DATABASE IF NOT EXISTS \`${cfg.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+        );
+        await bootstrapConn.query(`USE \`${cfg.database}\``);
+        await applySchemaAndUpgrades(bootstrapConn, cfg.database);
+        logger.info('MySQL database and schema verified', { database: cfg.database, host: cfg.host });
+      } catch (serverLevelErr) {
+        if (bootstrapConn) {
+          await bootstrapConn.end().catch(() => {});
+          bootstrapConn = null;
+        }
+        logger.warn('Server-level CREATE DATABASE skipped; connecting directly to target database', {
+          database: cfg.database,
+          reason: serverLevelErr.message,
+        });
+        const directConn = await connectWithAutoSsl(true);
+        try {
+          await applySchemaAndUpgrades(directConn, cfg.database);
+          logger.info('MySQL schema verified on pre-provisioned database', { database: cfg.database, host: cfg.host });
+        } finally {
+          await directConn.end().catch(() => {});
+        }
+      } finally {
+        if (bootstrapConn) {
+          await bootstrapConn.end().catch(() => {});
+        }
       }
     }
   }
@@ -169,6 +261,7 @@ async function initDatabase() {
     waitForConnections: true,
     connectionLimit: cfg.connectionLimit,
     queueLimit: 0,
+    connectTimeout: 10000,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000,
     dateStrings: ['DATE'],
@@ -177,12 +270,46 @@ async function initDatabase() {
     ...(cfg.ssl ? { ssl: cfg.ssl } : {}),
   });
 
-  // Verify pool connectivity
-  const conn = await pool.getConnection();
+  // Verify pool connectivity (and auto-enable TLS if skipped schema sync on remote host)
   try {
-    await conn.ping();
-  } finally {
-    conn.release();
+    const conn = await pool.getConnection();
+    try {
+      await conn.ping();
+    } finally {
+      conn.release();
+    }
+  } catch (poolErr) {
+    if (!cfg.ssl && !isLocalHost && isSecureTransportError(poolErr)) {
+      await pool.end().catch(() => {});
+      cfg.ssl = { minVersion: 'TLSv1.2', rejectUnauthorized: true };
+      pool = mysql.createPool({
+        host: cfg.host,
+        port: cfg.port,
+        user: cfg.user,
+        password: cfg.password,
+        database: cfg.database,
+        waitForConnections: true,
+        connectionLimit: cfg.connectionLimit,
+        queueLimit: 0,
+        connectTimeout: 10000,
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10000,
+        dateStrings: ['DATE'],
+        decimalNumbers: true,
+        timezone: '+03:00',
+        ssl: cfg.ssl,
+      });
+      const retryConn = await pool.getConnection();
+      try {
+        await retryConn.ping();
+      } finally {
+        retryConn.release();
+      }
+    } else {
+      await pool.end().catch(() => {});
+      pool = null;
+      throw poolErr;
+    }
   }
 
   return pool;
@@ -250,10 +377,13 @@ async function ensureSchemaUpgrades(conn, dbName) {
   await addColumnIfMissing(conn, dbName, 'students', 'emergencyContactName', "emergencyContactName VARCHAR(150) DEFAULT '' AFTER address");
   await addColumnIfMissing(conn, dbName, 'students', 'emergencyContactPhone', "emergencyContactPhone VARCHAR(30) DEFAULT '' AFTER emergencyContactName");
   await addColumnIfMissing(conn, dbName, 'students', 'emergencyContactRelation', "emergencyContactRelation VARCHAR(80) DEFAULT '' AFTER emergencyContactPhone");
-  await addColumnIfMissing(conn, dbName, 'students', 'documentsNote', 'documentsNote TEXT AFTER emergencyContactRelation');
+  await addColumnIfMissing(conn, dbName, 'students', 'nationalIdNumber', "nationalIdNumber VARCHAR(60) DEFAULT '' AFTER emergencyContactRelation");
+  await addColumnIfMissing(conn, dbName, 'students', 'documentsNote', 'documentsNote TEXT AFTER nationalIdNumber');
   await addColumnIfMissing(conn, dbName, 'students', 'registeredByUserId', 'registeredByUserId CHAR(36) NULL AFTER notes');
   await addColumnIfMissing(conn, dbName, 'students', 'approvedByUserId', 'approvedByUserId CHAR(36) NULL AFTER registeredByUserId');
   await addColumnIfMissing(conn, dbName, 'students', 'approvedAt', 'approvedAt DATETIME NULL AFTER approvedByUserId');
+
+  await addColumnIfMissing(conn, dbName, 'registration_applications', 'nationalIdNumber', "nationalIdNumber VARCHAR(60) DEFAULT '' AFTER emergencyContactRelation");
 
   await addColumnIfMissing(conn, dbName, 'enrollments', 'batchName', "batchName VARCHAR(80) NOT NULL DEFAULT 'Batch A' AFTER paymentPlanId");
   await addColumnIfMissing(conn, dbName, 'enrollments', 'registrationFee', 'registrationFee DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER expectedGraduationDate');
@@ -281,7 +411,7 @@ async function ensureSchemaUpgrades(conn, dbName) {
       'DUE_TODAY', 'DUE_SOON', 'OVERDUE', 'UNPAID_INSTALLMENT', 'OUTSTANDING_BALANCE',
       'NEW_REGISTRATION', 'NEW_PAYMENT_SUBMISSION',
       'REGISTRATION_APPROVED', 'REGISTRATION_REJECTED', 'CORRECTION_REQUIRED',
-      'PAYMENT_APPROVED', 'PAYMENT_REJECTED'
+      'PAYMENT_APPROVED', 'PAYMENT_REJECTED', 'STUDENT_MESSAGE'
     ) NOT NULL
   `);
 

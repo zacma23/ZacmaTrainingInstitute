@@ -1,7 +1,7 @@
 const express = require('express');
-const { getPool } = require('../config/db');
 const { authenticate } = require('../middleware/auth');
-const { CHATBOT_ROLES, sendMultiTurnChat } = require('../services/geminiService');
+const { CHATBOT_ROLES, sendMultiTurnChat, streamMultiTurnChat } = require('../services/geminiService');
+const { buildAssistantContext, executeAssistantTool } = require('../services/aiToolExecutor');
 
 const router = express.Router();
 
@@ -12,6 +12,8 @@ router.get('/roles', (_req, res) => {
     id: r.id,
     label: r.label,
     model: r.model,
+    useTools: Boolean(r.useTools),
+    useSearchGrounding: Boolean(r.useSearchGrounding),
   }));
   res.json({ roles });
 });
@@ -19,60 +21,14 @@ router.get('/roles', (_req, res) => {
 router.post('/message', async (req, res) => {
   try {
     const { message, history = [], roleId = 'fee_advisor' } = req.body || {};
-    const pool = getPool();
-
-    const [settingRows] = await pool.query(
-      "SELECT settingValue FROM settings WHERE settingKey = 'instituteName' LIMIT 1"
-    );
-    const instituteName =
-      settingRows.length > 0 && settingRows[0].settingValue
-        ? settingRows[0].settingValue
-        : 'Zacma Technology Institute';
-
-    const [courses] = await pool.query(
-      "SELECT code, name, durationValue, durationUnit, registrationFee, defaultFee FROM courses WHERE status = 'Active' ORDER BY name ASC LIMIT 20"
-    );
-    const coursesSummary = courses
-      .map(
-        (c) =>
-          `- ${c.code} ${c.name} (${c.durationValue} ${c.durationUnit}): Tuition ${Number(c.defaultFee).toLocaleString()} ETB, Registration ${Number(c.registrationFee).toLocaleString()} ETB`
-      )
-      .join('\n');
-
-    let statsSummary = '';
-    if (req.user.role === 'admin') {
-      const [[stAgg]] = await pool.query(
-        "SELECT COUNT(*) AS totalStudents, SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) AS activeStudents FROM students"
-      );
-      const [[payAgg]] = await pool.query(
-        'SELECT COALESCE(SUM(totalCourseFee), 0) AS expectedTotal FROM enrollments'
-      );
-      const [[txAgg]] = await pool.query(
-        'SELECT COALESCE(SUM(amountPaid), 0) AS collectedTotal FROM transactions'
-      );
-      const [[appPending]] = await pool.query(
-        "SELECT COUNT(*) AS cnt FROM registration_applications WHERE status = 'PENDING_ADMIN_APPROVAL'"
-      );
-      const [[payPending]] = await pool.query(
-        "SELECT COUNT(*) AS cnt FROM payment_submissions WHERE status = 'PENDING'"
-      );
-      statsSummary = [
-        `Total Students: ${stAgg.totalStudents || 0} (Active: ${stAgg.activeStudents || 0})`,
-        `Expected Tuition: ${Number(payAgg.expectedTotal || 0).toLocaleString()} ETB | Collected: ${Number(txAgg.collectedTotal || 0).toLocaleString()} ETB`,
-        `Pending Admin Approvals: ${appPending.cnt || 0} registrations, ${payPending.cnt || 0} payment submissions`,
-      ].join('\n');
-    }
+    const context = await buildAssistantContext(req.user);
 
     const result = await sendMultiTurnChat({
       message,
       history,
       roleId,
-      context: {
-        instituteName,
-        userRole: req.user.role,
-        coursesSummary,
-        statsSummary,
-      },
+      context,
+      toolExecutor: (name, args) => executeAssistantTool(name, args, req.user),
     });
 
     res.json(result);
@@ -81,6 +37,41 @@ router.post('/message', async (req, res) => {
     res.status(status).json({
       error: err.message || 'Unable to generate assistant response.',
     });
+  }
+});
+
+// Server-Sent Events (SSE) Streaming Endpoint
+router.post('/stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  const writeEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { message, history = [], roleId = 'fee_advisor' } = req.body || {};
+    const context = await buildAssistantContext(req.user);
+
+    const result = await streamMultiTurnChat({
+      message,
+      history,
+      roleId,
+      context,
+      toolExecutor: (name, args) => executeAssistantTool(name, args, req.user),
+      onEvent: writeEvent,
+    });
+
+    writeEvent('done', result);
+    res.end();
+  } catch (err) {
+    writeEvent('error', {
+      error: err.message || 'Unable to stream assistant response.',
+      status: err.status || 500,
+    });
+    res.end();
   }
 });
 

@@ -4,10 +4,17 @@ const { randomUUID } = require('crypto');
 const { getPool } = require('../config/db');
 const logger = require('../config/logger');
 
+function isJwtConfigured() {
+  const secret = (process.env.JWT_SECRET || '').trim();
+  return secret.length >= 16;
+}
+
 function getJwtSecret() {
-  const secret = process.env.JWT_SECRET;
+  const secret = (process.env.JWT_SECRET || '').trim();
   if (!secret || secret.length < 16) {
-    throw new Error('JWT_SECRET environment variable must be set (minimum 16 characters).');
+    const err = new Error('Server configuration error: JWT_SECRET environment variable must be set (minimum 16 characters).');
+    err.code = 'JWT_CONFIG_ERROR';
+    throw err;
   }
   return secret;
 }
@@ -50,6 +57,9 @@ async function authenticate(req, res, next) {
     req.user = rows[0];
     return next();
   } catch (err) {
+    if (err.code === 'JWT_CONFIG_ERROR') {
+      return res.status(500).json({ error: err.message });
+    }
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Session expired. Please sign in again.' });
     }
@@ -76,6 +86,7 @@ const loginLimiter = rateLimit({
   max: 25,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, trustProxy: false },
   message: { error: 'Too many login attempts. Please wait 15 minutes and try again.' },
 });
 
@@ -84,6 +95,7 @@ const apiLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, trustProxy: false },
   message: { error: 'Too many requests. Please slow down.' },
 });
 
@@ -117,6 +129,7 @@ async function recordAuditLog(
 }
 
 module.exports = {
+  isJwtConfigured,
   signToken,
   authenticate,
   requireRole,

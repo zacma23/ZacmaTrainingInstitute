@@ -50,14 +50,14 @@ router.get('/', async (req, res) => {
 
     if (studentId && String(studentId).trim()) {
       const sid = `%${String(studentId).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ?)';
-      params.push(sid, sid);
+      query += ' AND (LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.nationalIdNumber) LIKE ?)';
+      params.push(sid, sid, sid);
     }
 
     if (search && String(search).trim()) {
       const s = `%${String(search).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(s.fullName) LIKE ? OR LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.phone) LIKE ? OR LOWER(s.altPhone) LIKE ?)';
-      params.push(s, s, s, s, s);
+      query += ' AND (LOWER(s.fullName) LIKE ? OR LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.phone) LIKE ? OR LOWER(s.altPhone) LIKE ? OR LOWER(s.nationalIdNumber) LIKE ?)';
+      params.push(s, s, s, s, s, s);
     }
 
     query += ' ORDER BY s.createdAt DESC';
@@ -206,6 +206,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
       emergencyContactName,
       emergencyContactPhone,
       emergencyContactRelation,
+      nationalIdNumber,
       documentsNote,
       batchName,
       courseId,
@@ -270,9 +271,9 @@ router.post('/', requireRole('admin'), async (req, res) => {
       await conn.query(
         `INSERT INTO students
          (id, studentCode, fullName, gender, phone, altPhone, email, region, city, address,
-          emergencyContactName, emergencyContactPhone, emergencyContactRelation, documentsNote,
+          emergencyContactName, emergencyContactPhone, emergencyContactRelation, nationalIdNumber, documentsNote,
           registrationDate, status, notes, registeredByUserId, approvedByUserId, approvedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           studentId,
           studentCode,
@@ -287,6 +288,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
           String(emergencyContactName || '').trim(),
           String(emergencyContactPhone || '').trim(),
           String(emergencyContactRelation || '').trim(),
+          String(nationalIdNumber || '').trim().slice(0, 60),
           String(documentsNote || '').trim(),
           regDate,
           status || 'Active',
@@ -345,7 +347,14 @@ router.post('/', requireRole('admin'), async (req, res) => {
         conn
       );
 
-      return { id: studentId, studentCode, enrollmentId, totalCourseFee: feeAmount, installments: schedule };
+      return {
+        id: studentId,
+        studentCode,
+        nationalIdNumber: String(nationalIdNumber || '').trim().slice(0, 60),
+        enrollmentId,
+        totalCourseFee: feeAmount,
+        installments: schedule,
+      };
     });
 
     // Run reminder check asynchronously in background
@@ -372,6 +381,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
       emergencyContactName,
       emergencyContactPhone,
       emergencyContactRelation,
+      nationalIdNumber,
       batchName,
       courseId,
       courseStartDate,
@@ -409,7 +419,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
       await conn.query(
         `UPDATE students
          SET fullName = ?, gender = ?, phone = ?, altPhone = ?, email = ?, region = ?, city = ?, address = ?,
-             emergencyContactName = ?, emergencyContactPhone = ?, emergencyContactRelation = ?,
+             emergencyContactName = ?, emergencyContactPhone = ?, emergencyContactRelation = ?, nationalIdNumber = ?,
              status = ?, notes = ?
          WHERE id = ?`,
         [
@@ -424,6 +434,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
           emergencyContactName !== undefined ? String(emergencyContactName).trim() : cur.emergencyContactName,
           emergencyContactPhone !== undefined ? String(emergencyContactPhone).trim() : cur.emergencyContactPhone,
           emergencyContactRelation !== undefined ? String(emergencyContactRelation).trim() : cur.emergencyContactRelation,
+          nationalIdNumber !== undefined ? String(nationalIdNumber).trim().slice(0, 60) : (cur.nationalIdNumber || ''),
           status || cur.status,
           notes !== undefined ? String(notes).trim() : cur.notes,
           req.params.id,

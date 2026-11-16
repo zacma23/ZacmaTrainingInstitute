@@ -1,8 +1,11 @@
 const express = require('express');
+const { randomUUID } = require('crypto');
 const { getPool } = require('../config/db');
 const { authenticate, requireRole, recordAuditLog } = require('../middleware/auth');
 const { runReminderCheck } = require('../services/reminderService');
-const { getGatewayStatus } = require('../services/messagingService');
+const { getGatewayStatus, dispatchReminderMessage } = require('../services/messagingService');
+const { computeEnrollmentFinancials } = require('../services/feeService');
+const { getAddisTodayISO, formatETB } = require('../utils/ethiopia');
 
 const router = express.Router();
 router.use(authenticate);
@@ -15,6 +18,13 @@ function buildScopeSql(user) {
     sql: "n.targetRole = 'accountant' AND (n.targetUserId IS NULL OR n.targetUserId = ?)",
     params: [user.id],
   };
+}
+
+async function getMessagingSettings(pool) {
+  const [rows] = await pool.query(
+    "SELECT settingKey, settingValue FROM settings WHERE settingKey IN ('instituteName', 'instituteShortName', 'institutePhone', 'smsFromNumber', 'smsSenderId')"
+  );
+  return Object.fromEntries(rows.map((r) => [r.settingKey, r.settingValue]));
 }
 
 // List role-scoped notifications
@@ -55,11 +65,249 @@ router.get('/', async (req, res) => {
       `SELECT COUNT(*) AS cnt FROM notifications n WHERE n.isRead = 0 AND ${scope.sql}`,
       scope.params
     );
+    const msgSettings = await getMessagingSettings(pool);
 
     res.json({
       unreadCount: unreadRow.cnt,
-      gateway: getGatewayStatus(),
+      gateway: getGatewayStatus(msgSettings),
       notifications: items,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Send message to student(s) via configured phone number provider (ADMIN ONLY)
+router.post('/send-message', requireRole('admin'), async (req, res) => {
+  try {
+    const {
+      targetMode = 'single',
+      studentId = '',
+      studentIds = [],
+      courseId = '',
+      channel = 'sms',
+      title = 'Institute Notification',
+      message = '',
+      notificationId = '',
+    } = req.body || {};
+
+    const cleanMessage = String(message || '').trim();
+    if (!cleanMessage) {
+      return res.status(400).json({ error: 'Message text is required.' });
+    }
+    if (!['sms', 'whatsapp'].includes(channel)) {
+      return res.status(400).json({ error: 'Invalid messaging channel. Use sms or whatsapp.' });
+    }
+
+    const pool = getPool();
+    const todayISO = getAddisTodayISO();
+    const settings = await getMessagingSettings(pool);
+    const gateway = getGatewayStatus(settings);
+    const instituteName = settings.instituteName || 'Zacma Technology Institute';
+
+    let studentQuery = `
+      SELECT s.id AS studentId, s.studentCode, s.fullName, s.phone, s.status AS studentStatus,
+             e.id AS enrollmentId, e.courseId, e.totalCourseFee, e.registrationFee, e.courseStartDate,
+             e.assignedDueDate, e.enrollmentStatus,
+             c.name AS courseName
+      FROM students s
+      LEFT JOIN enrollments e ON e.studentId = s.id AND e.enrollmentStatus IN ('Active', 'Completed')
+      LEFT JOIN courses c ON c.id = e.courseId
+      WHERE s.status != 'Archived'
+    `;
+    const params = [];
+
+    if (Array.isArray(studentIds) && studentIds.length > 0) {
+      const cleanIds = studentIds.map((x) => String(x).trim()).filter(Boolean).slice(0, 200);
+      studentQuery += ` AND s.id IN (${cleanIds.map(() => '?').join(',')})`;
+      params.push(...cleanIds);
+    } else if (targetMode === 'single') {
+      if (!studentId) {
+        return res.status(400).json({ error: 'Please select a student to message.' });
+      }
+      studentQuery += ' AND s.id = ?';
+      params.push(studentId);
+    } else if (targetMode === 'course') {
+      if (!courseId) {
+        return res.status(400).json({ error: 'Please select a course.' });
+      }
+      studentQuery += ' AND e.courseId = ?';
+      params.push(courseId);
+    } else if (targetMode === 'overdue' || targetMode === 'unpaid') {
+      studentQuery += " AND s.status IN ('Active', 'Suspended')";
+    } else if (targetMode === 'all') {
+      studentQuery += " AND s.status IN ('Active', 'Suspended')";
+    } else {
+      return res.status(400).json({ error: 'Unsupported targetMode.' });
+    }
+
+    studentQuery += ' ORDER BY s.fullName ASC LIMIT 250';
+    const [rawRows] = await pool.query(studentQuery, params);
+
+    // Deduplicate by studentId (keep primary enrollment if multiple)
+    const studentMap = new Map();
+    for (const r of rawRows) {
+      if (!studentMap.has(r.studentId)) {
+        studentMap.set(r.studentId, r);
+      }
+    }
+    let targets = Array.from(studentMap.values());
+
+    if (targets.length === 0) {
+      return res.status(404).json({ error: 'No matching students found for this audience.' });
+    }
+
+    const enrIds = targets.map((t) => t.enrollmentId).filter(Boolean);
+    const instByEnr = new Map();
+    const txnByEnr = new Map();
+    if (enrIds.length > 0) {
+      const placeholders = enrIds.map(() => '?').join(',');
+      const [insts] = await pool.query(
+        `SELECT * FROM installments WHERE enrollmentId IN (${placeholders}) ORDER BY installmentNumber ASC`,
+        enrIds
+      );
+      const [txns] = await pool.query(
+        `SELECT * FROM transactions WHERE enrollmentId IN (${placeholders}) ORDER BY paymentDate ASC, createdAt ASC`,
+        enrIds
+      );
+      for (const i of insts) {
+        if (!instByEnr.has(i.enrollmentId)) instByEnr.set(i.enrollmentId, []);
+        instByEnr.get(i.enrollmentId).push(i);
+      }
+      for (const t of txns) {
+        if (!txnByEnr.has(t.enrollmentId)) txnByEnr.set(t.enrollmentId, []);
+        txnByEnr.get(t.enrollmentId).push(t);
+      }
+    }
+
+    targets = targets
+      .map((t) => {
+        if (!t.enrollmentId) {
+          return { ...t, remainingBalance: 0, isOverdue: false };
+        }
+        const fin = computeEnrollmentFinancials(
+          t,
+          instByEnr.get(t.enrollmentId) || [],
+          txnByEnr.get(t.enrollmentId) || [],
+          todayISO
+        );
+        return {
+          ...t,
+          remainingBalance: fin.remainingBalance,
+          isOverdue: fin.isOverdue,
+        };
+      })
+      .filter((t) => {
+        if (targetMode === 'overdue') return t.isOverdue && t.remainingBalance > 0.009;
+        if (targetMode === 'unpaid') return t.remainingBalance > 0.009;
+        return true;
+      })
+      .slice(0, 200);
+
+    if (targets.length === 0) {
+      return res.status(404).json({ error: 'No students matched the selected balance/overdue filter.' });
+    }
+
+    const results = [];
+    let sentCount = 0;
+    let failedCount = 0;
+    let notConfiguredCount = 0;
+
+    for (const st of targets) {
+      const personalized = cleanMessage
+        .replace(/\{studentName\}/gi, st.fullName || 'Student')
+        .replace(/\{studentCode\}/gi, st.studentCode || '')
+        .replace(/\{courseName\}/gi, st.courseName || 'your course')
+        .replace(/\{balance\}/gi, formatETB(st.remainingBalance || 0))
+        .replace(/\{instituteName\}/gi, instituteName);
+
+      const dispatch = await dispatchReminderMessage({
+        phone: st.phone,
+        message: personalized,
+        channel,
+        fromNumber: settings.smsFromNumber || '',
+        senderId: settings.smsSenderId || '',
+      });
+
+      if (dispatch.sent) sentCount++;
+      else if (dispatch.channelStatus === 'SMS_NOT_CONFIGURED' || dispatch.channelStatus === 'WHATSAPP_NOT_CONFIGURED') {
+        notConfiguredCount++;
+      } else {
+        failedCount++;
+      }
+
+      if (notificationId && targets.length === 1) {
+        await pool.query(
+          'UPDATE notifications SET channelStatus = ? WHERE id = ?',
+          [dispatch.channelStatus, notificationId]
+        );
+      } else {
+        const msgId = randomUUID();
+        const dedupeKey = `MSG:${st.studentId}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+        await pool.query(
+          `INSERT INTO notifications
+           (id, studentId, enrollmentId, targetRole, type, dedupeKey, title, message, amountDue, dueDate, overdueDays, channelStatus, isRead)
+           VALUES (?, ?, ?, 'admin', 'STUDENT_MESSAGE', ?, ?, ?, ?, ?, 0, ?, 1)`,
+          [
+            msgId,
+            st.studentId,
+            st.enrollmentId || null,
+            dedupeKey,
+            String(title || 'Student Phone Notification').trim().slice(0, 190),
+            `[${channel.toUpperCase()} -> ${st.phone}] ${personalized}`,
+            Number(st.remainingBalance || 0),
+            todayISO,
+            dispatch.channelStatus,
+          ]
+        );
+      }
+
+      results.push({
+        studentId: st.studentId,
+        studentCode: st.studentCode,
+        fullName: st.fullName,
+        phone: st.phone,
+        sent: dispatch.sent,
+        channelStatus: dispatch.channelStatus,
+        detail: dispatch.detail,
+      });
+    }
+
+    await recordAuditLog({
+      user: req.user,
+      action: 'SEND_STUDENT_MESSAGE',
+      entityType: 'notification',
+      entityId: targetMode === 'single' ? targets[0].studentId : targetMode,
+      newValue: {
+        channel,
+        provider: channel === 'sms' ? gateway.sms.provider : gateway.whatsapp.provider,
+        fromNumber: gateway.sms.fromNumber || '',
+        totalTargeted: targets.length,
+        sentCount,
+        failedCount,
+        notConfiguredCount,
+      },
+      ipAddress: req.ip,
+    });
+
+    const summaryMsg =
+      sentCount > 0
+        ? `Sent ${sentCount} of ${targets.length} ${channel.toUpperCase()} message(s) via ${channel === 'sms' ? gateway.sms.provider : gateway.whatsapp.provider}.`
+        : notConfiguredCount === targets.length
+          ? `${channel.toUpperCase()} provider is not configured on the server yet (${targets.length} message(s) logged as not configured).`
+          : `Failed to deliver ${failedCount} of ${targets.length} message(s).`;
+
+    res.json({
+      message: summaryMsg,
+      channel,
+      provider: channel === 'sms' ? gateway.sms.provider : gateway.whatsapp.provider,
+      fromNumber: gateway.sms.fromNumber || '',
+      gatewayConfigured: channel === 'sms' ? gateway.sms.configured : gateway.whatsapp.configured,
+      totalTargeted: targets.length,
+      sentCount,
+      failedCount,
+      notConfiguredCount,
+      results,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

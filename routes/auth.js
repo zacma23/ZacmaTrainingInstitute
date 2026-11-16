@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
 const { getPool } = require('../config/db');
-const { authenticate, signToken, loginLimiter, recordAuditLog } = require('../middleware/auth');
+const { authenticate, signToken, loginLimiter, recordAuditLog, isJwtConfigured } = require('../middleware/auth');
 const { verifyFirebaseIdToken } = require('../services/firebaseAdmin');
 
 const router = express.Router();
@@ -12,9 +12,12 @@ router.get('/status', async (req, res) => {
   try {
     const pool = getPool();
     const [[row]] = await pool.query('SELECT COUNT(*) AS cnt FROM users');
-    res.json({ initialized: row.cnt > 0 });
+    res.json({ initialized: row.cnt > 0, jwtConfigured: isJwtConfigured() });
   } catch (err) {
-    res.status(500).json({ error: 'Database status check failed.' });
+    res.status(503).json({
+      error: 'Database status check failed.',
+      detail: err.message,
+    });
   }
 });
 
@@ -128,7 +131,10 @@ router.post('/login', loginLimiter, async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ error: 'Authentication failed.' });
+    if (err.code === 'JWT_CONFIG_ERROR') {
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Authentication failed.', detail: err.message });
   }
 });
 
@@ -257,6 +263,9 @@ router.post('/google', loginLimiter, async (req, res) => {
       },
     });
   } catch (err) {
+    if (err.code === 'JWT_CONFIG_ERROR') {
+      return res.status(500).json({ error: err.message });
+    }
     res.status(401).json({ error: err.message || 'Google authentication failed.' });
   }
 });

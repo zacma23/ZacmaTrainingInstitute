@@ -12,7 +12,7 @@ const cron = require('node-cron');
 
 const logger = require('./config/logger');
 const { initDatabase, checkDbHealth } = require('./config/db');
-const { apiLimiter } = require('./middleware/auth');
+const { apiLimiter, isJwtConfigured } = require('./middleware/auth');
 const { ensureBaselineCatalog } = require('./services/seedService');
 const { runReminderCheck } = require('./services/reminderService');
 
@@ -31,6 +31,7 @@ const reportRoutes = require('./routes/reports');
 const userRoutes = require('./routes/users');
 const settingsRoutes = require('./routes/settings');
 const chatRoutes = require('./routes/chat');
+const aiRoutes = require('./routes/ai');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -50,14 +51,16 @@ app.use(
 );
 app.use(compression());
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '8mb' }));
 
 // Health check (unauthenticated for load balancer / uptime probes)
 app.get('/api/health', async (req, res) => {
   const db = await checkDbHealth();
-  res.status(db.connected ? 200 : 503).json({
-    status: db.connected ? 'ok' : 'degraded',
+  const jwtOk = isJwtConfigured();
+  res.status(db.connected && jwtOk ? 200 : 503).json({
+    status: db.connected && jwtOk ? 'ok' : 'degraded',
     timezone: process.env.TZ,
+    jwtConfigured: jwtOk,
     database: db,
   });
 });
@@ -89,6 +92,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', userRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api', courseRoutes);
 
 // Vercel Cron / External Scheduler endpoint for automated reminder checks

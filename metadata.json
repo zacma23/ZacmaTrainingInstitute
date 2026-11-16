@@ -1,6 +1,6 @@
 {
   "name": "BirrLedger — Student Fee Management System",
   "description": "Production Student Fee Payment, Installment Scheduling, Receipting & Reporting System for Ethiopian Short-Term Training Institutes.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

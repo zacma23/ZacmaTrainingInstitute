@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS students (
   emergencyContactName VARCHAR(150) DEFAULT '',
   emergencyContactPhone VARCHAR(30) DEFAULT '',
   emergencyContactRelation VARCHAR(80) DEFAULT '',
+  nationalIdNumber VARCHAR(60) DEFAULT '',
   documentsNote TEXT,
   registrationDate DATE NOT NULL,
   status ENUM('Active', 'Graduated', 'Suspended', 'Archived') NOT NULL DEFAULT 'Active',
@@ -147,6 +148,7 @@ CREATE TABLE IF NOT EXISTS registration_applications (
   emergencyContactName VARCHAR(150) DEFAULT '',
   emergencyContactPhone VARCHAR(30) DEFAULT '',
   emergencyContactRelation VARCHAR(80) DEFAULT '',
+  nationalIdNumber VARCHAR(60) DEFAULT '',
   documentsNote TEXT,
   courseId CHAR(36) NOT NULL,
   paymentPlanCode VARCHAR(40) NOT NULL DEFAULT 'full',
@@ -340,7 +342,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     'DUE_TODAY', 'DUE_SOON', 'OVERDUE', 'UNPAID_INSTALLMENT', 'OUTSTANDING_BALANCE',
     'NEW_REGISTRATION', 'NEW_PAYMENT_SUBMISSION',
     'REGISTRATION_APPROVED', 'REGISTRATION_REJECTED', 'CORRECTION_REQUIRED',
-    'PAYMENT_APPROVED', 'PAYMENT_REJECTED'
+    'PAYMENT_APPROVED', 'PAYMENT_REJECTED', 'STUDENT_MESSAGE'
   ) NOT NULL,
   dedupeKey VARCHAR(160) NOT NULL UNIQUE,
   title VARCHAR(200) NOT NULL,

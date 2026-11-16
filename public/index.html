@@ -45,17 +45,6 @@
             <i data-lucide="log-in"></i>
             <span>Sign In</span>
           </button>
-          <div class="auth-divider"><span>or</span></div>
-          <button type="button" id="googleLoginBtn" class="btn btn-secondary btn-block google-signin-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-              <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.26-.96 2.33-2.04 3.04l3.3 2.56c1.92-1.77 3.04-4.38 3.04-7.48 0-.72-.06-1.41-.19-2.08H12z"/>
-              <path fill="#34A853" d="M12 22c2.75 0 5.06-.91 6.75-2.46l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2l-3.41 2.63C4.57 19.72 8.01 22 12 22z"/>
-              <path fill="#4A90E2" d="M6.3 13.75c-.2-.61-.32-1.26-.32-1.93s.12-1.32.32-1.93L2.89 7.26C2.19 8.65 1.8 10.21 1.8 11.82s.39 3.17 1.09 4.56l3.41-2.63z"/>
-              <path fill="#FBBC05" d="M12 5.69c1.5 0 2.84.52 3.9 1.53l2.92-2.92C17.05 2.65 14.74 1.64 12 1.64 8.01 1.64 4.57 3.92 2.89 7.26l3.41 2.63c.8-2.41 3.05-4.2 5.7-4.2z"/>
-            </svg>
-            <span>Sign in with Google</span>
-          </button>
-          <p class="auth-meta">Currency: ETB &middot; Timezone: Africa/Addis_Ababa</p>
         </form>
 
         <!-- First-Time Setup Form (Shown only when 0 users exist in MySQL) -->
@@ -74,7 +63,7 @@
           <div class="form-row-2">
             <div class="form-group">
               <label for="setupEmail">Email (Optional)</label>
-              <input type="email" id="setupEmail" placeholder="admin@institute.edu.et" />
+              <input type="email" id="setupEmail" placeholder="admin@zacmatech.edu.et" />
             </div>
             <div class="form-group">
               <label for="setupPhone">Phone</label>
@@ -91,6 +80,18 @@
             <span>Create Administrator &amp; Enter</span>
           </button>
         </form>
+
+        <div class="auth-divider" style="margin:14px 0;"><span>or</span></div>
+        <button type="button" id="googleLoginBtn" class="btn btn-secondary btn-block google-signin-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.26-.96 2.33-2.04 3.04l3.3 2.56c1.92-1.77 3.04-4.38 3.04-7.48 0-.72-.06-1.41-.19-2.08H12z"/>
+            <path fill="#34A853" d="M12 22c2.75 0 5.06-.91 6.75-2.46l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2l-3.41 2.63C4.57 19.72 8.01 22 12 22z"/>
+            <path fill="#4A90E2" d="M6.3 13.75c-.2-.61-.32-1.26-.32-1.93s.12-1.32.32-1.93L2.89 7.26C2.19 8.65 1.8 10.21 1.8 11.82s.39 3.17 1.09 4.56l3.41-2.63z"/>
+            <path fill="#FBBC05" d="M12 5.69c1.5 0 2.84.52 3.9 1.53l2.92-2.92C17.05 2.65 14.74 1.64 12 1.64 8.01 1.64 4.57 3.92 2.89 7.26l3.41 2.63c.8-2.41 3.05-4.2 5.7-4.2z"/>
+          </svg>
+          <span>Sign in with Google</span>
+        </button>
+        <p class="auth-meta">Currency: ETB &middot; Timezone: Africa/Addis_Ababa</p>
       </div>
     </div>
 
@@ -183,8 +184,8 @@
               <span>Settings</span>
             </button>
             <button type="button" class="nav-item" data-page="assistant">
-              <i data-lucide="message-square-text"></i>
-              <span>Fee Assistant</span>
+              <i data-lucide="sparkles"></i>
+              <span>AI Assistance Suite</span>
             </button>
           </div>
 
@@ -225,8 +226,8 @@
               <span>My Profile</span>
             </button>
             <button type="button" class="nav-item" data-page="assistant">
-              <i data-lucide="message-square-text"></i>
-              <span>Fee Assistant</span>
+              <i data-lucide="sparkles"></i>
+              <span>AI Assistance Suite</span>
             </button>
           </div>
         </nav>
@@ -687,6 +688,22 @@
                   <h3>Payment Entry Form</h3>
                 </div>
                 <form id="recordPaymentForm" class="form-stack">
+                  <div class="ai-inline-strip">
+                    <div style="font-size:12.5px;">
+                      <strong>AI Payment Slip OCR:</strong> Upload Telebirr / CBE / Bank slip to auto-fill amount, date &amp; reference
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                      <input type="file" id="adminPaySlipFile" accept="image/jpeg,image/png,image/webp,.pdf" style="display:none;" />
+                      <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('adminPaySlipFile').click()">
+                        <i data-lucide="upload"></i>
+                        <span>Upload Slip</span>
+                      </button>
+                      <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('adminPaySlip')">
+                        <i data-lucide="camera"></i>
+                        <span>Scan Slip</span>
+                      </button>
+                    </div>
+                  </div>
                   <div class="form-group">
                     <label for="payStudentQuickSearch">Quick Search by Student Name or ID</label>
                     <input type="text" id="payStudentQuickSearch" placeholder="Type student name or ID (e.g., ZTI-2026-0001)..." />
@@ -1085,11 +1102,15 @@
                 <p>Role-scoped approval updates, submission alerts, and scheduled installment reminders.</p>
               </div>
               <div class="page-head-actions">
+                <button type="button" id="openSendStudentMsgBtn" class="btn btn-primary btn-sm admin-only">
+                  <i data-lucide="send"></i>
+                  <span>Message Students</span>
+                </button>
                 <button type="button" id="runReminderCheckBtn" class="btn btn-secondary btn-sm admin-only">
                   <i data-lucide="radar"></i>
                   <span>Run Check Now</span>
                 </button>
-                <button type="button" id="markAllReadBtn" class="btn btn-primary btn-sm">
+                <button type="button" id="markAllReadBtn" class="btn btn-secondary btn-sm">
                   <i data-lucide="check-check"></i>
                   <span>Mark All Read</span>
                 </button>
@@ -1106,6 +1127,7 @@
               </select>
               <select id="notifTypeFilter">
                 <option value="">All Notification Types</option>
+                <option value="STUDENT_MESSAGE">Direct Phone / SMS Message</option>
                 <option value="NEW_REGISTRATION">New Registration</option>
                 <option value="NEW_PAYMENT_SUBMISSION">New Payment Submission</option>
                 <option value="REGISTRATION_APPROVED">Registration Approved</option>
@@ -1338,6 +1360,16 @@
                     <label for="setAddress">Street / Sub-City / Woreda Address</label>
                     <input type="text" id="setAddress" />
                   </div>
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="setSmsFromNumber">Outgoing Provider Phone Number (From)</label>
+                      <input type="text" id="setSmsFromNumber" placeholder="e.g., +251911667890 or +1..." />
+                    </div>
+                    <div class="form-group">
+                      <label for="setSmsSenderId">SMS Sender ID / Label</label>
+                      <input type="text" id="setSmsSenderId" placeholder="e.g., ZacmaTech" maxlength="20" />
+                    </div>
+                  </div>
                   <div class="form-group">
                     <label for="setReceiptFooter">Receipt Footer Note</label>
                     <textarea id="setReceiptFooter" rows="2"></textarea>
@@ -1500,6 +1532,80 @@
                 <input type="hidden" id="accRegEditAppId" />
                 <div id="accResubmitNotice" class="notice-banner" style="display:none; background:#fffbeb; border-color:#f59e0b; color:#92400e;"></div>
 
+                <!-- AI-ENHANCED FAYDA NATIONAL ID SCANNER -->
+                <div class="ai-scan-card">
+                  <div class="ai-scan-card-head">
+                    <div>
+                      <div class="ai-scan-card-title">
+                        <i data-lucide="scan-line"></i>
+                        <span>AI-Enhanced Registration — Scan or Upload Fayda National ID</span>
+                      </div>
+                      <p style="font-size:12px; color:var(--text-secondary); margin:3px 0 0;">
+                        Upload a Fayda digital ID PDF/photo or scan the physical card (front &amp; back) with your camera to auto-fill student details using Gemini AI.
+                      </p>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                      <button type="button" id="accFaydaExtractBtn" class="btn btn-primary btn-sm">
+                        <i data-lucide="sparkles"></i>
+                        <span>Extract Fayda ID Details</span>
+                      </button>
+                      <button type="button" id="accFaydaClearBtn" class="btn btn-secondary btn-sm">Clear Scan</button>
+                    </div>
+                  </div>
+
+                  <div class="ai-scan-slots">
+                    <div class="ai-scan-slot">
+                      <div class="ai-scan-slot-head">
+                        <span>1. Fayda ID Front / Digital PDF *</span>
+                        <div style="display:flex; gap:6px;">
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('accFaydaFront')">
+                            <i data-lucide="camera"></i>
+                            <span>Camera</span>
+                          </button>
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('accFaydaFrontInput').click()">
+                            <i data-lucide="upload"></i>
+                            <span>Upload</span>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="file" id="accFaydaFrontInput" accept=".pdf,image/jpeg,image/png,image/webp" style="display:none;" />
+                      <div id="accFaydaFrontPreview" class="ai-scan-preview">No file or snapshot selected yet.</div>
+                    </div>
+
+                    <div class="ai-scan-slot">
+                      <div class="ai-scan-slot-head">
+                        <span>2. Fayda ID Back (Optional — Address &amp; FIN)</span>
+                        <div style="display:flex; gap:6px;">
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('accFaydaBack')">
+                            <i data-lucide="camera"></i>
+                            <span>Camera</span>
+                          </button>
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('accFaydaBackInput').click()">
+                            <i data-lucide="upload"></i>
+                            <span>Upload</span>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="file" id="accFaydaBackInput" accept=".pdf,image/jpeg,image/png,image/webp" style="display:none;" />
+                      <div id="accFaydaBackPreview" class="ai-scan-preview">Optional back side for Woreda/Region/FIN.</div>
+                    </div>
+                  </div>
+
+                  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <label class="checkbox-row">
+                      <input type="checkbox" id="accFaydaAutoAttach" checked />
+                      <span>Also attach scanned Fayda ID image/PDF to application supporting documents</span>
+                    </label>
+                    <button type="button" id="accAiRecommendCourseBtn" class="btn btn-secondary btn-xs">
+                      <i data-lucide="wand-2"></i>
+                      <span>AI Recommend Course &amp; Plan</span>
+                    </button>
+                  </div>
+
+                  <div id="accFaydaResultBox" class="ai-result-box" style="display:none;"></div>
+                  <div id="accFaydaErrorBox" class="inline-error" style="display:none;"></div>
+                </div>
+
                 <h4 style="font-size:14px; color:var(--text-primary);">1. Student Personal &amp; Contact Information</h4>
                 <div class="form-row-3">
                   <div class="form-group">
@@ -1564,10 +1670,14 @@
                   </div>
                 </div>
 
-                <div class="form-row-2">
+                <div class="form-row-3">
                   <div class="form-group">
-                    <label for="accDocsNote">Document Notes (ID / Transcript / Photo)</label>
-                    <input type="text" id="accDocsNote" placeholder="e.g., Kebele ID copy + 2 passport photos verified" />
+                    <label for="accStNationalId">Fayda National ID (FCN / FIN)</label>
+                    <input type="text" id="accStNationalId" placeholder="Auto-filled by Fayda AI scan or enter manually" maxlength="60" />
+                  </div>
+                  <div class="form-group">
+                    <label for="accDocsNote">Document Notes (Fayda ID / Transcript / Photo)</label>
+                    <input type="text" id="accDocsNote" placeholder="e.g., Fayda ID verified + 2 passport photos" />
                   </div>
                   <div class="form-group">
                     <label for="accDocsFiles">Attach Supporting Documents (Max 3 files: PDF/JPG/PNG, 1.5MB each)</label>
@@ -1735,6 +1845,22 @@
                   <h3>Payment Submission Form</h3>
                 </div>
                 <form id="accPaySubmitForm" class="form-stack">
+                  <div class="ai-inline-strip">
+                    <div style="font-size:12.5px;">
+                      <strong>AI Payment Slip OCR:</strong> Upload Telebirr / CBE / Bank slip to auto-fill amount, date &amp; reference
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                      <input type="file" id="accPaySlipFile" accept="image/jpeg,image/png,image/webp,.pdf" style="display:none;" />
+                      <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('accPaySlipFile').click()">
+                        <i data-lucide="upload"></i>
+                        <span>Upload Slip</span>
+                      </button>
+                      <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('accPaySlip')">
+                        <i data-lucide="camera"></i>
+                        <span>Scan Slip</span>
+                      </button>
+                    </div>
+                  </div>
                   <div class="form-group">
                     <label for="accPayStudentQuickSearch">Quick Search by Student Name or ID</label>
                     <input type="text" id="accPayStudentQuickSearch" placeholder="Type student name or ID (e.g., ZTI-2026-0001)..." />
@@ -2029,56 +2155,341 @@
             </div>
           </section>
 
-          <!-- SHARED: MULTI-TURN FEE ASSISTANT CHATBOT -->
+          <!-- SHARED: GEMINI AI ASSISTANCE SUITE -->
           <section id="page-assistant" class="page">
             <div class="page-head">
               <div>
-                <h2>BirrLedger Operations &amp; Fee Assistant</h2>
-                <p>Multi-turn assistant grounded in your active Ethiopian training institute courses, installment plans, and fee policies.</p>
+                <h2>Zacma Gemini AI Assistance Suite</h2>
+                <p>Live MySQL function-calling assistant, Fayda National ID OCR scanner, Telebirr/bank slip reader, Google Search grounding, voice transcription, and TTS.</p>
               </div>
               <div class="page-head-actions">
-                <select id="chatRoleSelect" aria-label="Assistant role">
-                  <option value="fee_advisor">Fee &amp; Policy Advisor</option>
-                  <option value="reminder_drafter">Fast Reminder Drafter</option>
-                  <option value="audit_analyst">Operations &amp; Compliance Helper</option>
+                <span id="aiStatusIndicator" class="status-tag status-info">Checking AI...</span>
+                <select id="aiVoiceSelect" aria-label="TTS Voice" title="Read-Aloud Voice">
+                  <option value="Kore">Voice: Kore</option>
+                  <option value="Puck">Voice: Puck</option>
+                  <option value="Charon">Voice: Charon</option>
+                  <option value="Fenrir">Voice: Fenrir</option>
+                  <option value="Zephyr">Voice: Zephyr</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="tab-bar" id="aiSuiteTabs">
+              <button type="button" class="tab-btn active" data-aitab="chat">
+                <i data-lucide="message-square-text" style="width:14px;height:14px;"></i>
+                <span>Live Operations Chat</span>
+              </button>
+              <button type="button" class="tab-btn" data-aitab="fayda">
+                <i data-lucide="scan-line" style="width:14px;height:14px;"></i>
+                <span>Fayda ID Scanner</span>
+              </button>
+              <button type="button" class="tab-btn" data-aitab="slip">
+                <i data-lucide="receipt" style="width:14px;height:14px;"></i>
+                <span>Payment Slip OCR</span>
+              </button>
+              <button type="button" class="tab-btn" data-aitab="insights">
+                <i data-lucide="globe" style="width:14px;height:14px;"></i>
+                <span>Search Grounding, SMS &amp; Insights</span>
+              </button>
+            </div>
+
+            <!-- AI TAB 1: LIVE FUNCTION-CALLING + STREAMING + VOICE CHAT -->
+            <div id="aiTab-chat" class="ai-tool-panel active">
+              <div class="toolbar" style="margin-bottom:10px;">
+                <select id="chatRoleSelect" aria-label="Assistant role">
+                  <option value="fee_advisor">Fee &amp; Policy Advisor (Live DB Tools)</option>
+                  <option value="audit_analyst">Operations &amp; Compliance Analyst (Live DB Tools)</option>
+                  <option value="reminder_drafter">Fast Reminder &amp; SMS Drafter</option>
+                  <option value="web_researcher">Web &amp; Policy Researcher (Google Search)</option>
+                </select>
+                <label class="checkbox-row" style="margin-left:auto;">
+                  <input type="checkbox" id="chatStreamToggle" checked />
+                  <span>Live Streaming (SSE)</span>
+                </label>
                 <button type="button" id="clearChatBtn" class="btn btn-secondary btn-sm">
                   <i data-lucide="rotate-ccw"></i>
                   <span>New Conversation</span>
                 </button>
               </div>
+
+              <div class="panel chat-panel">
+                <div id="chatThread" class="chat-thread"></div>
+
+                <div id="chatQuickPrompts" class="chat-quick-prompts">
+                  <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Check our live active courses, fees, and pending approval queues right now.">
+                    Live Courses &amp; Queues
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Which students currently have overdue balances or unpaid installments? Summarize their amounts.">
+                    Lookup Overdue Balances
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Draft a polite Telebirr payment reminder message in English and Amharic for an installment due in 3 days.">
+                    Bilingual Telebirr Reminder
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Give me today's institute financial collection rate and attendance summary.">
+                    Today's KPI Snapshot
+                  </button>
+                </div>
+
+                <div id="chatErrorBox" class="inline-error" style="display:none; margin:0 16px 8px;"></div>
+
+                <form id="chatComposerForm" class="chat-composer">
+                  <button type="button" id="chatVoiceRecordBtn" class="btn btn-secondary" title="Dictate voice note (Gemini Transcribe)">
+                    <i data-lucide="mic"></i>
+                    <span>Voice</span>
+                  </button>
+                  <textarea
+                    id="chatMessageInput"
+                    rows="2"
+                    maxlength="4000"
+                    placeholder="Ask anything about live students, overdue fees, courses, pending approvals, or web regulations..."
+                    required
+                  ></textarea>
+                  <button type="submit" id="chatSendBtn" class="btn btn-primary">
+                    <i data-lucide="send"></i>
+                    <span>Send</span>
+                  </button>
+                </form>
+              </div>
             </div>
 
-            <div class="panel chat-panel">
-              <div id="chatThread" class="chat-thread"></div>
-
-              <div id="chatQuickPrompts" class="chat-quick-prompts">
-                <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Explain our installment plan options and registration fees across active courses.">
-                  Installment &amp; Fee Overview
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Draft a polite Telebirr payment reminder message in English and Amharic for an installment due in 3 days.">
-                  Draft Payment Reminder
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Summarize the difference between Accountant submission confirmations and Administrator official receipts.">
-                  RBAC Receipt Policy
-                </button>
+            <!-- AI TAB 2: DEDICATED FAYDA ID SCANNER WORKBENCH -->
+            <div id="aiTab-fayda" class="ai-tool-panel">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Fayda National ID Scanner Workbench</h3>
+                  <div style="display:flex; gap:8px;">
+                    <button type="button" id="hubFaydaExtractBtn" class="btn btn-primary btn-sm">
+                      <i data-lucide="sparkles"></i>
+                      <span>Scan &amp; Extract Fayda ID</span>
+                    </button>
+                    <button type="button" id="hubFaydaApplyRegBtn" class="btn btn-secondary btn-sm" style="display:none;">
+                      <i data-lucide="user-plus"></i>
+                      <span>Open in Registration Form</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="modal-body form-stack">
+                  <p style="font-size:13px; color:var(--text-secondary); margin:0;">
+                    Upload or scan an Ethiopian Fayda National ID card (front &amp; optional back) or Fayda digital printable PDF. Extracted details can be transferred with 1 click directly into student registration.
+                  </p>
+                  <div class="ai-scan-slots">
+                    <div class="ai-scan-slot">
+                      <div class="ai-scan-slot-head">
+                        <span>Front Side / Digital Fayda PDF *</span>
+                        <div style="display:flex; gap:6px;">
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('hubFaydaFront')">
+                            <i data-lucide="camera"></i>
+                            <span>Camera</span>
+                          </button>
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('hubFaydaFrontInput').click()">
+                            <i data-lucide="upload"></i>
+                            <span>Upload</span>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="file" id="hubFaydaFrontInput" accept=".pdf,image/jpeg,image/png,image/webp" style="display:none;" />
+                      <div id="hubFaydaFrontPreview" class="ai-scan-preview">No file or snapshot selected.</div>
+                    </div>
+                    <div class="ai-scan-slot">
+                      <div class="ai-scan-slot-head">
+                        <span>Back Side (Optional)</span>
+                        <div style="display:flex; gap:6px;">
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('hubFaydaBack')">
+                            <i data-lucide="camera"></i>
+                            <span>Camera</span>
+                          </button>
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('hubFaydaBackInput').click()">
+                            <i data-lucide="upload"></i>
+                            <span>Upload</span>
+                          </button>
+                        </div>
+                      </div>
+                      <input type="file" id="hubFaydaBackInput" accept=".pdf,image/jpeg,image/png,image/webp" style="display:none;" />
+                      <div id="hubFaydaBackPreview" class="ai-scan-preview">Optional back side for Woreda/Region/FIN.</div>
+                    </div>
+                  </div>
+                  <div id="hubFaydaErrorBox" class="inline-error" style="display:none;"></div>
+                  <div id="hubFaydaResultBox" class="ai-result-box" style="display:none;"></div>
+                </div>
               </div>
+            </div>
 
-              <div id="chatErrorBox" class="inline-error" style="display:none; margin:0 16px 8px;"></div>
+            <!-- AI TAB 3: TELEBIRR / CBE / BANK PAYMENT SLIP OCR -->
+            <div id="aiTab-slip" class="ai-tool-panel">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Telebirr &amp; Bank Payment Slip OCR Reader</h3>
+                  <div style="display:flex; gap:8px;">
+                    <input type="file" id="hubSlipInput" accept=".pdf,image/jpeg,image/png,image/webp" style="display:none;" />
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openCameraScanner('hubSlip')">
+                      <i data-lucide="camera"></i>
+                      <span>Camera Scan</span>
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('hubSlipInput').click()">
+                      <i data-lucide="upload"></i>
+                      <span>Upload Slip / Screenshot</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="modal-body form-stack">
+                  <p style="font-size:13px; color:var(--text-secondary); margin:0;">
+                    Reads Telebirr, CBE Birr, M-Pesa, Awash, Abyssinia, or paper deposit slips using Gemini multimodal vision to extract exact amount, payment date, method, and transaction reference.
+                  </p>
+                  <div id="hubSlipPreview" class="ai-scan-preview">Upload or scan a payment receipt to extract fields.</div>
+                  <div id="hubSlipErrorBox" class="inline-error" style="display:none;"></div>
+                  <div id="hubSlipResultBox" class="ai-result-box" style="display:none;"></div>
+                  <div id="hubSlipApplyWrap" style="display:none;">
+                    <button type="button" id="hubSlipApplyBtn" class="btn btn-primary btn-sm">
+                      <i data-lucide="credit-card"></i>
+                      <span>Use Extracted Details in Payment Form</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-              <form id="chatComposerForm" class="chat-composer">
-                <textarea
-                  id="chatMessageInput"
-                  rows="2"
-                  maxlength="4000"
-                  placeholder="Ask about course fees, installment breakdowns, reminder templates, or approval workflows..."
-                  required
-                ></textarea>
-                <button type="submit" id="chatSendBtn" class="btn btn-primary">
-                  <i data-lucide="send"></i>
-                  <span>Send</span>
-                </button>
-              </form>
+            <!-- AI TAB 4: SEARCH GROUNDING, BILINGUAL SMS STUDIO & EXECUTIVE BRIEFING -->
+            <div id="aiTab-insights" class="ai-tool-panel">
+              <div class="split-2col">
+                <!-- Left: Google Search & URL Grounding + SMS Drafter -->
+                <div class="form-stack">
+                  <div class="panel">
+                    <div class="panel-header">
+                      <h3>Google Search &amp; URL Context Research</h3>
+                    </div>
+                    <form id="aiResearchForm" class="modal-body form-stack">
+                      <div class="form-group">
+                        <label for="aiResearchQuery">Research Question *</label>
+                        <textarea id="aiResearchQuery" rows="2" placeholder="e.g., What are the latest Ethiopian NIDP Fayda Digital ID verification requirements for training centers?" required></textarea>
+                      </div>
+                      <div class="form-group">
+                        <label for="aiResearchUrls">Optional Reference URLs (one per line — uses URL Context)</label>
+                        <textarea id="aiResearchUrls" rows="2" placeholder="https://id.gov.et (leave blank to search the live web with Google Search)"></textarea>
+                      </div>
+                      <div class="form-actions">
+                        <button type="submit" id="aiResearchBtn" class="btn btn-primary btn-sm">
+                          <i data-lucide="search"></i>
+                          <span>Run Grounded Research</span>
+                        </button>
+                      </div>
+                      <div id="aiResearchError" class="inline-error" style="display:none;"></div>
+                      <div id="aiResearchOutput" style="display:none; font-size:13px; line-height:1.6;"></div>
+                    </form>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-header">
+                      <h3>AI Bilingual SMS / WhatsApp Composer</h3>
+                    </div>
+                    <form id="aiSmsDraftForm" class="modal-body form-stack">
+                      <div class="form-row-3">
+                        <div class="form-group">
+                          <label for="aiSmsAudience">Audience</label>
+                          <select id="aiSmsAudience">
+                            <option value="Overdue Balance Students">Overdue Students</option>
+                            <option value="Upcoming Installment Due">Upcoming Due (3 Days)</option>
+                            <option value="Newly Registered Students">Welcome / Orientation</option>
+                            <option value="All Active Students">General Institute Notice</option>
+                          </select>
+                        </div>
+                        <div class="form-group">
+                          <label for="aiSmsLanguage">Language</label>
+                          <select id="aiSmsLanguage">
+                            <option value="English">English</option>
+                            <option value="Amharic">Amharic (አማርኛ)</option>
+                            <option value="Bilingual English and Amharic">Bilingual (EN + AM)</option>
+                            <option value="Afaan Oromo">Afaan Oromo</option>
+                          </select>
+                        </div>
+                        <div class="form-group">
+                          <label for="aiSmsTone">Tone</label>
+                          <select id="aiSmsTone">
+                            <option value="Polite">Polite</option>
+                            <option value="Firm">Firm</option>
+                            <option value="Urgent">Urgent</option>
+                            <option value="Warm & Encouraging">Warm</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="form-group">
+                        <label for="aiSmsTopic">Topic / Extra Details</label>
+                        <input type="text" id="aiSmsTopic" placeholder="e.g., Pay via Telebirr or visit Bole office before Friday 5 PM" />
+                      </div>
+                      <div class="form-actions">
+                        <button type="submit" id="aiSmsDraftBtn" class="btn btn-primary btn-sm">
+                          <i data-lucide="sparkles"></i>
+                          <span>Draft Notice with AI</span>
+                        </button>
+                      </div>
+                      <div id="aiSmsDraftError" class="inline-error" style="display:none;"></div>
+                      <div id="aiSmsDraftResult" style="display:none;" class="form-stack">
+                        <div class="ai-result-box" id="aiSmsDraftPreview"></div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                          <button type="button" id="aiSmsSpeakBtn" class="btn btn-secondary btn-xs">
+                            <i data-lucide="volume-2"></i>
+                            <span>Listen (TTS)</span>
+                          </button>
+                          <button type="button" id="aiSmsSendPortalBtn" class="btn btn-primary btn-xs admin-only">
+                            <i data-lucide="send"></i>
+                            <span>Open in Phone SMS Sender</span>
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Right: Executive Briefing (Admin) + Voice Note Transcriber -->
+                <div class="form-stack">
+                  <div class="panel admin-only">
+                    <div class="panel-header">
+                      <h3>Executive Financial &amp; Risk Briefing (Admin)</h3>
+                      <button type="button" id="aiExecBriefingBtn" class="btn btn-primary btn-sm">
+                        <i data-lucide="sparkles"></i>
+                        <span>Generate Live Briefing</span>
+                      </button>
+                    </div>
+                    <div class="modal-body form-stack">
+                      <p style="font-size:13px; color:var(--text-secondary); margin:0;">
+                        Analyzes live MySQL KPIs, overdue installment exposure, pending approval queues, and attendance rates with Gemini 4 Hydrogen reasoning.
+                      </p>
+                      <div id="aiExecError" class="inline-error" style="display:none;"></div>
+                      <div id="aiExecOutput" style="display:none;" class="form-stack"></div>
+                    </div>
+                  </div>
+
+                  <div class="panel">
+                    <div class="panel-header">
+                      <h3>Audio Voice Note Transcriber</h3>
+                    </div>
+                    <div class="modal-body form-stack">
+                      <p style="font-size:13px; color:var(--text-secondary); margin:0;">
+                        Record a live staff voice memo or upload an audio clip (MP3/WAV/WEBM) to transcribe cleanly with <code>gemini-3.5-transcribe</code>.
+                      </p>
+                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" id="hubVoiceRecordBtn" class="btn btn-secondary btn-sm">
+                          <i data-lucide="mic"></i>
+                          <span>Record Microphone Note</span>
+                        </button>
+                        <input type="file" id="hubAudioUploadInput" accept="audio/*" style="display:none;" />
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('hubAudioUploadInput').click()">
+                          <i data-lucide="upload"></i>
+                          <span>Upload Audio File</span>
+                        </button>
+                      </div>
+                      <div id="hubAudioError" class="inline-error" style="display:none;"></div>
+                      <textarea id="hubAudioTranscript" rows="4" placeholder="Transcribed voice note will appear here..."></textarea>
+                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" id="hubTranscriptSendChatBtn" class="btn btn-secondary btn-xs">Send Transcript to AI Chat</button>
+                        <button type="button" id="hubTranscriptTtsBtn" class="btn btn-secondary btn-xs">
+                          <i data-lucide="volume-2"></i>
+                          <span>Read Aloud (TTS)</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         </main>
@@ -2096,6 +2507,23 @@
         </div>
         <form id="studentForm" class="modal-body form-stack">
           <input type="hidden" id="stId" />
+          <div class="ai-inline-strip">
+            <div style="font-size:12.5px;">
+              <strong>AI Fayda ID Auto-Fill:</strong> Upload or scan student's Fayda National ID to pre-fill form
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <input type="file" id="adminFaydaFileInput" accept=".pdf,image/jpeg,image/png,image/webp" style="display:none;" />
+              <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('adminFaydaFileInput').click()">
+                <i data-lucide="upload"></i>
+                <span>Upload Fayda ID</span>
+              </button>
+              <button type="button" class="btn btn-secondary btn-xs" onclick="openCameraScanner('adminFaydaFront')">
+                <i data-lucide="camera"></i>
+                <span>Camera Scan</span>
+              </button>
+            </div>
+          </div>
+          <div id="adminFaydaStatusBox" class="ai-result-box" style="display:none;"></div>
           <div class="form-row-3">
             <div class="form-group">
               <label for="stFullName">Full Name *</label>
@@ -2150,7 +2578,7 @@
             </div>
           </div>
 
-          <div class="form-row-3">
+          <div class="form-row-4">
             <div class="form-group">
               <label for="stEmgName">Emergency Contact Name</label>
               <input type="text" id="stEmgName" />
@@ -2158,6 +2586,10 @@
             <div class="form-group">
               <label for="stEmgPhone">Emergency Phone</label>
               <input type="text" id="stEmgPhone" />
+            </div>
+            <div class="form-group">
+              <label for="stNationalId">Fayda National ID (FCN/FIN)</label>
+              <input type="text" id="stNationalId" placeholder="Optional Fayda FCN/FIN" maxlength="60" />
             </div>
             <div class="form-group">
               <label for="stBatchName">Batch</label>
@@ -2541,6 +2973,124 @@
       </div>
     </div>
 
+    <!-- MODAL: Send Phone / SMS Message to Students (Admin Only) -->
+    <div id="sendStudentMsgModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>Notify Students via Phone Number Provider</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('sendStudentMsgModal')"><i data-lucide="x"></i></button>
+        </div>
+        <form id="sendStudentMsgForm" class="modal-body form-stack">
+          <div id="sendMsgGatewayBanner" class="notice-banner" style="margin:0;"></div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="msgTargetMode">Target Audience *</label>
+              <select id="msgTargetMode">
+                <option value="single">Single Student</option>
+                <option value="overdue">Overdue Balance Students</option>
+                <option value="unpaid">All Students with Remaining Balance</option>
+                <option value="course">Students in Specific Course</option>
+                <option value="all">All Active Students</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="msgChannel">Delivery Channel *</label>
+              <select id="msgChannel">
+                <option value="sms">SMS (Configured Phone Number Provider)</option>
+                <option value="whatsapp">WhatsApp (Configured Gateway)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="msgSingleStudentWrap" class="form-stack">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="msgStudentSearch">Search Student (Name or ID)</label>
+                <input type="text" id="msgStudentSearch" placeholder="e.g., Abebe or ZTI-2026-0001..." />
+              </div>
+              <div class="form-group">
+                <label for="msgStudentSelect">Select Student *</label>
+                <select id="msgStudentSelect"></select>
+              </div>
+            </div>
+          </div>
+
+          <div id="msgCourseWrap" class="form-group" style="display:none;">
+            <label for="msgCourseSelect">Select Course *</label>
+            <select id="msgCourseSelect"></select>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="msgTemplateSelect">Quick Message Template</label>
+              <select id="msgTemplateSelect">
+                <option value="custom">Custom Message</option>
+                <option value="fee_reminder">Fee Balance Reminder</option>
+                <option value="overdue_notice">Overdue Payment Notice</option>
+                <option value="class_update">Class / Schedule Notice</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="msgTitleInput">Log Title</label>
+              <input type="text" id="msgTitleInput" value="Student Phone Notification" maxlength="160" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="msgBodyInput">Message Text * <span id="msgCharCount" style="font-weight:400; color:var(--text-muted);">(0 chars)</span></label>
+            <textarea id="msgBodyInput" rows="4" required placeholder="Type your message... Available tags: {studentName}, {studentCode}, {courseName}, {balance}, {instituteName}"></textarea>
+            <span style="font-size:12px; color:var(--text-muted);">Personalization placeholders: <code>{studentName}</code>, <code>{studentCode}</code>, <code>{courseName}</code>, <code>{balance}</code>, <code>{instituteName}</code></span>
+          </div>
+
+          <div id="sendMsgError" class="inline-error" style="display:none;"></div>
+          <div id="sendMsgResultsWrap" style="display:none;"></div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('sendStudentMsgModal')">Close</button>
+            <button type="submit" id="sendMsgSubmitBtn" class="btn btn-primary">
+              <i data-lucide="send"></i>
+              <span>Send Message Now</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Live Camera Capture for Fayda National ID & Payment Slips -->
+    <div id="faydaCameraModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="faydaCameraTitle">Scan Document with Camera</h3>
+          <button type="button" class="icon-btn" onclick="closeCameraScanner()"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body form-stack">
+          <p id="faydaCameraHint" style="font-size:12.5px; color:var(--text-secondary); margin:0;">
+            Align the Fayda National ID card or payment slip inside the frame, ensure clear lighting, and click Capture.
+          </p>
+          <div class="fayda-camera-stage">
+            <video id="faydaCameraVideo" autoplay playsinline muted></video>
+            <img id="faydaCameraSnapshot" alt="Captured preview" style="display:none;" />
+            <div class="fayda-camera-frame"></div>
+          </div>
+          <canvas id="faydaCameraCanvas" style="display:none;"></canvas>
+          <div id="faydaCameraError" class="inline-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeCameraScanner()">Cancel</button>
+            <button type="button" id="faydaCameraRetakeBtn" class="btn btn-secondary" style="display:none;" onclick="retakeCameraSnapshot()">Retake</button>
+            <button type="button" id="faydaCameraCaptureBtn" class="btn btn-primary" onclick="captureCameraSnapshot()">
+              <i data-lucide="camera"></i>
+              <span>Capture Snapshot</span>
+            </button>
+            <button type="button" id="faydaCameraUseBtn" class="btn btn-primary" style="display:none;" onclick="confirmCameraSnapshot()">
+              <i data-lucide="check"></i>
+              <span>Use Captured Image</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast Container -->
     <div id="toastContainer" class="toast-container"></div>
 
@@ -2550,6 +3100,7 @@
     <script src="/js/api.js"></script>
     <script src="/js/receipt.js"></script>
     <script src="/js/firebase-bundle.js"></script>
+    <script src="/js/ai-tools.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

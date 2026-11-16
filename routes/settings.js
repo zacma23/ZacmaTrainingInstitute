@@ -39,7 +39,7 @@ router.get('/', requireRole('admin'), async (req, res) => {
     res.json({
       settings,
       regions: ETHIOPIAN_REGIONS,
-      gateway: getGatewayStatus(),
+      gateway: getGatewayStatus(settings),
       database: dbHealth,
     });
   } catch (err) {
@@ -59,6 +59,8 @@ router.put('/', requireRole('admin'), async (req, res) => {
       'instituteAddress',
       'reminderDaysBefore',
       'receiptFooterNote',
+      'smsFromNumber',
+      'smsSenderId',
     ];
 
     const pool = getPool();

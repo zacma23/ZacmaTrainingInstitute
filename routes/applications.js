@@ -82,8 +82,8 @@ router.get('/', async (req, res) => {
 
     if (search) {
       const s = `%${String(search).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(ra.fullName) LIKE ? OR LOWER(ra.applicationNumber) LIKE ? OR LOWER(ra.phone) LIKE ? OR LOWER(ra.submissionRef) LIKE ?)';
-      params.push(s, s, s, s);
+      query += ' AND (LOWER(ra.fullName) LIKE ? OR LOWER(ra.applicationNumber) LIKE ? OR LOWER(ra.phone) LIKE ? OR LOWER(ra.submissionRef) LIKE ? OR LOWER(ra.nationalIdNumber) LIKE ?)';
+      params.push(s, s, s, s, s);
     }
 
     query += ' ORDER BY ra.createdAt DESC';
@@ -239,6 +239,7 @@ router.post('/', async (req, res) => {
       emergencyContactName,
       emergencyContactPhone,
       emergencyContactRelation,
+      nationalIdNumber,
       documentsNote,
       documents,
       courseId,
@@ -344,13 +345,13 @@ router.post('/', async (req, res) => {
         `INSERT INTO registration_applications (
            id, applicationNumber, submissionRef, submittedByUserId, submittedByName,
            fullName, gender, phone, altPhone, email, region, city, address,
-           emergencyContactName, emergencyContactPhone, emergencyContactRelation, documentsNote,
+           emergencyContactName, emergencyContactPhone, emergencyContactRelation, nationalIdNumber, documentsNote,
            courseId, paymentPlanCode, officialRegistrationFee, officialCourseFee,
            initialRegistrationPaid, initialCoursePaid, totalInitialSubmitted,
            paymentMethod, transactionReference, submissionNotes,
            registrationDate, courseStartDate, expectedGraduationDate, assignedDueDate,
            customInstallments, status
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_ADMIN_APPROVAL')`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_ADMIN_APPROVAL')`,
         [
           appId,
           applicationNumber,
@@ -368,6 +369,7 @@ router.post('/', async (req, res) => {
           String(emergencyContactName || '').trim(),
           normEmgPhone,
           String(emergencyContactRelation || '').trim(),
+          String(nationalIdNumber || '').trim().slice(0, 60),
           String(documentsNote || '').trim(),
           course.id,
           planCode,
@@ -476,6 +478,7 @@ router.put('/:id', async (req, res) => {
       emergencyContactName,
       emergencyContactPhone,
       emergencyContactRelation,
+      nationalIdNumber,
       documentsNote,
       documents,
       courseId,
@@ -544,7 +547,7 @@ router.put('/:id', async (req, res) => {
       await conn.query(
         `UPDATE registration_applications SET
            fullName = ?, gender = ?, phone = ?, altPhone = ?, email = ?, region = ?, city = ?, address = ?,
-           emergencyContactName = ?, emergencyContactPhone = ?, emergencyContactRelation = ?, documentsNote = ?,
+           emergencyContactName = ?, emergencyContactPhone = ?, emergencyContactRelation = ?, nationalIdNumber = ?, documentsNote = ?,
            courseId = ?, paymentPlanCode = ?, officialRegistrationFee = ?, officialCourseFee = ?,
            initialRegistrationPaid = ?, initialCoursePaid = ?, totalInitialSubmitted = ?,
            paymentMethod = ?, transactionReference = ?, submissionNotes = ?,
@@ -563,6 +566,7 @@ router.put('/:id', async (req, res) => {
           emergencyContactName !== undefined ? String(emergencyContactName).trim() : prev.emergencyContactName,
           normEmgPhone,
           emergencyContactRelation !== undefined ? String(emergencyContactRelation).trim() : prev.emergencyContactRelation,
+          nationalIdNumber !== undefined ? String(nationalIdNumber).trim().slice(0, 60) : (prev.nationalIdNumber || ''),
           documentsNote !== undefined ? String(documentsNote).trim() : prev.documentsNote,
           course.id,
           planCode,
@@ -658,9 +662,9 @@ router.post('/:id/approve', requireRole('admin'), async (req, res) => {
       await conn.query(
         `INSERT INTO students (
            id, studentCode, fullName, gender, phone, altPhone, email, region, city, address,
-           emergencyContactName, emergencyContactPhone, emergencyContactRelation, documentsNote,
+           emergencyContactName, emergencyContactPhone, emergencyContactRelation, nationalIdNumber, documentsNote,
            registrationDate, status, notes, registeredByUserId, approvedByUserId, approvedAt
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, NOW())`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, NOW())`,
         [
           studentId,
           studentCode,
@@ -675,6 +679,7 @@ router.post('/:id/approve', requireRole('admin'), async (req, res) => {
           app.emergencyContactName,
           app.emergencyContactPhone,
           app.emergencyContactRelation,
+          app.nationalIdNumber || '',
           app.documentsNote,
           String(app.registrationDate).slice(0, 10),
           app.submissionNotes || '',

@@ -15,6 +15,7 @@ const AppState = {
   chatHistory: [],
   chatBusy: false,
 };
+window.AppState = AppState;
 
 const PAGE_TITLES = {
   dashboard: 'Administrator Dashboard',
@@ -40,7 +41,7 @@ const PAGE_TITLES = {
   'acc-registrations': 'Registration History',
   'acc-payments': 'Payment History',
   'acc-profile': 'My Profile',
-  assistant: 'Fee Assistant',
+  assistant: 'AI Assistance Suite',
 };
 
 const ADMIN_PAGES = new Set([
@@ -91,7 +92,29 @@ async function bootstrapApp() {
       populateRegionDropdowns();
     }
 
-    const status = await fetch('/api/auth/status').then((r) => r.json());
+    const statusRes = await fetch('/api/auth/status');
+    const status = await statusRes.json().catch(() => ({}));
+    if (!statusRes.ok) {
+      document.getElementById('loginForm').style.display = 'flex';
+      document.getElementById('setupAdminForm').style.display = 'none';
+      const errEl = document.getElementById('loginError');
+      if (errEl) {
+        const detail = status.detail ? ` (${status.detail})` : '';
+        errEl.textContent = (status.error || 'Unable to connect to server database.') + detail;
+        errEl.style.display = 'block';
+      }
+      showAuthScreen();
+      return;
+    }
+
+    if (status.jwtConfigured === false) {
+      const errEl = document.getElementById('loginError');
+      if (errEl) {
+        errEl.textContent = 'Server configuration incomplete: JWT_SECRET (min 16 characters) must be configured in deployment environment variables.';
+        errEl.style.display = 'block';
+      }
+    }
+
     if (!status.initialized) {
       document.getElementById('loginForm').style.display = 'none';
       document.getElementById('setupAdminForm').style.display = 'flex';
@@ -107,7 +130,12 @@ async function bootstrapApp() {
 
     const me = await apiJson('/api/auth/me');
     enterWorkspace(me.user);
-  } catch {
+  } catch (err) {
+    const errEl = document.getElementById('loginError');
+    if (errEl && err && err.message) {
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
     showAuthScreen();
   }
 }
@@ -145,10 +173,12 @@ function enterWorkspace(user) {
 
   if (window.lucide) window.lucide.createIcons();
   startFirebaseWorkspaceSync();
-  loadSharedCatalogs().then(() => {
-    navigateTo(isAdmin ? 'dashboard' : 'acc-dashboard');
-    refreshRoleBadges();
-  });
+  loadSharedCatalogs()
+    .catch(() => {})
+    .finally(() => {
+      navigateTo(isAdmin ? 'dashboard' : 'acc-dashboard');
+      refreshRoleBadges();
+    });
 }
 
 function showFirestoreErrorBanner(err) {
@@ -342,7 +372,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     document.getElementById('loginPassword').value = '';
     enterWorkspace(data.user);
   } catch (err) {
-    errEl.textContent = err.message;
+    const detail = err.data && err.data.detail ? ` (${err.data.detail})` : '';
+    errEl.textContent = err.message + detail;
     errEl.style.display = 'block';
   }
 });
@@ -366,14 +397,17 @@ document.getElementById('setupAdminForm').addEventListener('submit', async (e) =
     enterWorkspace(data.user);
     showToast('Administrator account created!', 'success');
   } catch (err) {
-    errEl.textContent = err.message;
+    const detail = err.data && err.data.detail ? ` (${err.data.detail})` : '';
+    errEl.textContent = err.message + detail;
     errEl.style.display = 'block';
   }
 });
 
 document.getElementById('googleLoginBtn').addEventListener('click', async () => {
   const errEl = document.getElementById('loginError');
+  const setupErrEl = document.getElementById('setupError');
   errEl.style.display = 'none';
+  if (setupErrEl) setupErrEl.style.display = 'none';
   const btn = document.getElementById('googleLoginBtn');
   btn.disabled = true;
   try {
@@ -385,16 +419,27 @@ document.getElementById('googleLoginBtn').addEventListener('click', async () => 
       method: 'POST',
       body: JSON.stringify({ idToken: fbRes.idToken }),
     });
-    const currentFbUser = window.BirrFirebase.getCurrentUser();
-    if (currentFbUser) {
-      await window.BirrFirebase.syncUserProfileToFirestore(currentFbUser, data.user.role);
-    }
     setToken(data.token);
     enterWorkspace(data.user);
+    const currentFbUser = window.BirrFirebase.getCurrentUser();
+    if (currentFbUser) {
+      window.BirrFirebase.syncUserProfileToFirestore(currentFbUser, data.user.role).catch((syncErr) => {
+        showFirestoreErrorBanner(syncErr);
+      });
+    }
     showToast(`Signed in with Google as ${data.user.fullName}`, 'success');
   } catch (err) {
-    errEl.textContent = err.message || 'Google Sign-In failed.';
-    errEl.style.display = 'block';
+    let msg = err.message || 'Google Sign-In failed.';
+    if (err && (err.code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain'))) {
+      msg = `Domain "${window.location.hostname}" is not authorized for Google Sign-In. Add "${window.location.hostname}" in Firebase Console → Authentication → Settings → Authorized domains.`;
+    } else if (err && (err.code === 'auth/popup-blocked' || msg.includes('popup-blocked'))) {
+      msg = 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.';
+    } else if (err && err.data && err.data.detail) {
+      msg = `${msg} (${err.data.detail})`;
+    }
+    const targetErr = document.getElementById('setupAdminForm').style.display !== 'none' && setupErrEl ? setupErrEl : errEl;
+    targetErr.textContent = msg;
+    targetErr.style.display = 'block';
   } finally {
     btn.disabled = false;
   }
@@ -518,7 +563,7 @@ async function loadSharedCatalogs() {
     .map((c) => `<option value="${c.id}">${esc(c.name)} (${fmtETB(c.defaultFee)})</option>`)
     .join('');
 
-  ['stCourseId', 'accCourseId', 'attCourseSelect'].forEach((id) => {
+  ['stCourseId', 'accCourseId', 'attCourseSelect', 'msgCourseSelect'].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = activeCourseOptions;
   });
@@ -855,6 +900,7 @@ document.getElementById('openNewStudentBtn').addEventListener('click', () => {
   document.getElementById('studentFormError').style.display = 'none';
   document.getElementById('customInstRows').innerHTML = '';
   document.getElementById('customInstallmentBuilder').style.display = 'none';
+  if (window.BirrAiTools) window.BirrAiTools.clearAdminScanPreview();
 
   const today = getAddisTodayClientISO();
   document.getElementById('stRegDate').value = today;
@@ -944,6 +990,7 @@ document.getElementById('studentForm').addEventListener('submit', async (e) => {
     address: document.getElementById('stAddress').value,
     emergencyContactName: document.getElementById('stEmgName').value,
     emergencyContactPhone: document.getElementById('stEmgPhone').value,
+    nationalIdNumber: document.getElementById('stNationalId')?.value.trim() || '',
     batchName: document.getElementById('stBatchName').value || 'Batch A',
     courseId: document.getElementById('stCourseId').value,
     paymentPlanCode: planCode,
@@ -990,6 +1037,10 @@ async function openEditStudent(id) {
     document.getElementById('stAddress').value = s.address || '';
     document.getElementById('stEmgName').value = s.emergencyContactName || '';
     document.getElementById('stEmgPhone').value = s.emergencyContactPhone || '';
+    if (document.getElementById('stNationalId')) {
+      document.getElementById('stNationalId').value = s.nationalIdNumber || '';
+    }
+    if (window.BirrAiTools) window.BirrAiTools.clearAdminScanPreview();
     document.getElementById('stBatchName').value = s.batchName || 'Batch A';
     document.getElementById('stCourseId').value = s.courseId || '';
     document.getElementById('stPlanCode').value = s.paymentPlanCode || 'full';
@@ -1076,11 +1127,13 @@ async function viewStudentProfile(id) {
         <div class="kv-item"><span>Payment Plan</span><strong>${esc(s.paymentPlanName)}</strong></div>
         <div class="kv-item"><span>Next Due Date</span><strong class="mono">${s.nextDueDate ? fmtDate(s.nextDueDate) : 'Fully Settled'}</strong></div>
         <div class="kv-item"><span>Payment Status</span><strong><span class="status-tag ${s.isOverdue ? 'status-danger' : statusTagClass(s.paymentStatus)}">${s.isOverdue ? `Overdue (${s.overdueDays}d)` : esc(s.paymentStatus)}</span></strong></div>
+        ${s.nationalIdNumber ? `<div class="kv-item"><span>Fayda National ID</span><strong class="mono">${esc(s.nationalIdNumber)}</strong></div>` : ''}
       </div>
 
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h4 style="font-size:14px;">Installment Schedule</h4>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${isAdmin ? `<button type="button" class="btn btn-secondary btn-xs" onclick="closeModal('profileModal'); openSendStudentMessageModal({ targetMode: 'single', studentId: '${s.id}' })">Send Message</button>` : ''}
           ${isAdmin ? `<button type="button" class="btn btn-secondary btn-xs" onclick="closeModal('profileModal'); openEditStudent('${s.id}')">Edit Student</button>` : ''}
           ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteStudent('${s.id}', '${esc(s.fullName)}', '${esc(s.studentCode)}')">Delete Student</button>` : ''}
           ${isAdmin && s.enrollmentId ? `<button type="button" class="btn btn-secondary btn-xs" onclick="openAdjustInstallments('${s.id}')">Adjust Schedule</button>` : ''}
@@ -1298,6 +1351,7 @@ async function openReviewApplicationModal(id) {
         <div class="kv-item"><span>Reg Paid / Tuition Paid</span><strong class="mono">${fmtETB(a.initialRegistrationPaid)} / ${fmtETB(a.initialCoursePaid)}</strong></div>
         <div class="kv-item"><span>Submitted By</span><strong>${esc(a.submittedByName)}</strong></div>
         <div class="kv-item"><span>Status</span><strong><span class="status-tag ${statusTagClass(a.status)}">${esc(formatStatusLabel(a.status))}</span></strong></div>
+        ${a.nationalIdNumber ? `<div class="kv-item"><span>Fayda National ID</span><strong class="mono">${esc(a.nationalIdNumber)}</strong></div>` : ''}
       </div>
 
       ${a.documentsNote ? `<div style="margin-bottom:10px; font-size:13px;"><strong>Document Notes:</strong> ${esc(a.documentsNote)}</div>` : ''}
@@ -1959,6 +2013,7 @@ async function loadRecordPaymentView(preselectStudentId = '') {
       sel.value = preselectStudentId;
     }
     await onPayStudentChanged();
+    if (window.BirrAiTools) window.BirrAiTools.applyPendingSlipIfAny('admin');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2509,6 +2564,8 @@ document.getElementById('attRepExportCsvBtn').addEventListener('click', async ()
 });
 
 // ================= 12. NOTIFICATIONS (ROLE SCOPED) =================
+const notificationCacheMap = new Map();
+
 async function loadNotificationsView() {
   try {
     const filter = document.getElementById('notifReadFilter').value;
@@ -2517,28 +2574,32 @@ async function loadNotificationsView() {
     if (type) params.set('type', type);
 
     const data = await apiJson(`/api/notifications?${params.toString()}`);
+    AppState.gateway = data.gateway;
 
     const banner = document.getElementById('gatewayStatusBanner');
     banner.innerHTML = `
       <strong>Notification Channels:</strong>
       In-App Workflow &amp; Payment Alerts Active &middot;
-      WhatsApp: ${esc(data.gateway.whatsapp.statusMessage)} &middot;
-      SMS: ${esc(data.gateway.sms.statusMessage)}
+      SMS / Phone Provider: ${esc(data.gateway.sms.statusMessage)} &middot;
+      WhatsApp: ${esc(data.gateway.whatsapp.statusMessage)}
     `;
 
     refreshRoleBadges();
 
     const tbody = document.getElementById('notificationsTableBody');
+    notificationCacheMap.clear();
     if (data.notifications.length === 0) {
       tbody.innerHTML = '<tr><td colspan="8" class="empty-state-box">No notifications in this view.</td></tr>';
       return;
     }
 
+    const isAdmin = AppState.user?.role === 'admin';
     tbody.innerHTML = data.notifications
-      .map(
-        (n) => `
+      .map((n) => {
+        notificationCacheMap.set(n.id, n);
+        return `
       <tr>
-        <td><span class="status-tag ${n.type.includes('REJECT') || n.type === 'OVERDUE' ? 'status-danger' : n.type.includes('APPROVED') ? 'status-paid' : 'status-partial'}">${esc(n.type.replace(/_/g, ' '))}</span></td>
+        <td><span class="status-tag ${n.type.includes('REJECT') || n.type === 'OVERDUE' ? 'status-danger' : n.type.includes('APPROVED') || n.type === 'STUDENT_MESSAGE' ? 'status-paid' : 'status-partial'}">${esc(n.type.replace(/_/g, ' '))}</span></td>
         <td>
           <strong>${esc(n.title || n.studentName || 'Notification')}</strong><br/>
           <span style="font-size:12px; color:var(--text-secondary);">${esc(n.message || '')}</span>
@@ -2551,13 +2612,14 @@ async function loadNotificationsView() {
         <td>
           <div class="row-actions">
             ${!n.isRead ? `<button type="button" class="btn btn-secondary btn-xs" onclick="markNotificationRead('${n.id}')">Mark Read</button>` : ''}
+            ${isAdmin && n.studentId && n.phone ? `<button type="button" class="btn btn-primary btn-xs" onclick="sendSmsFromNotification('${n.id}')">Send SMS</button>` : ''}
             ${n.studentId ? `<button type="button" class="btn btn-secondary btn-xs" onclick="viewStudentProfile('${n.studentId}')">Student</button>` : ''}
-            ${AppState.user?.role === 'admin' ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteNotification('${n.id}')">Delete</button>` : ''}
+            ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteNotification('${n.id}')">Delete</button>` : ''}
           </div>
         </td>
       </tr>
-    `
-      )
+    `;
+      })
       .join('');
   } catch (err) {
     showToast(err.message, 'error');
@@ -2870,14 +2932,16 @@ async function loadSettingsView() {
     document.getElementById('setRegion').value = s.instituteRegion || 'Addis Ababa';
     document.getElementById('setCity').value = s.instituteCity || 'Addis Ababa';
     document.getElementById('setAddress').value = s.instituteAddress || '';
+    document.getElementById('setSmsFromNumber').value = s.smsFromNumber || '';
+    document.getElementById('setSmsSenderId').value = s.smsSenderId || '';
     document.getElementById('setReceiptFooter').value = s.receiptFooterNote || '';
 
     document.getElementById('settingsSystemInfo').innerHTML = `
       <div class="kv-item"><span>Database Engine</span><strong class="mono">${data.database.connected ? `Connected (${esc(data.database.version)})` : 'Disconnected'}</strong></div>
       <div class="kv-item"><span>Database Name</span><strong class="mono">${esc(data.database.database || 'sfmt_ethiopia')}</strong></div>
       <div class="kv-item"><span>Currency &amp; Timezone</span><strong class="mono">${esc(s.currency || 'ETB')} &middot; ${esc(s.timezone || 'Africa/Addis_Ababa')}</strong></div>
+      <div class="kv-item"><span>Phone / SMS Gateway</span><strong>${esc(data.gateway.sms.statusMessage)}</strong></div>
       <div class="kv-item"><span>WhatsApp Gateway</span><strong>${esc(data.gateway.whatsapp.statusMessage)}</strong></div>
-      <div class="kv-item"><span>SMS Gateway</span><strong>${esc(data.gateway.sms.statusMessage)}</strong></div>
       <div class="form-divider"></div>
       <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
         <div>
@@ -2887,7 +2951,7 @@ async function loadSettingsView() {
         <button type="button" id="runLegacyMigrateBtn" class="btn btn-secondary btn-sm">Import Legacy Data</button>
       </div>
       <p style="font-size:12.5px; color:var(--text-muted); margin:6px 0 0;">
-        To enable live WhatsApp or SMS notifications, configure <code>WHATSAPP_PROVIDER</code> / <code>SMS_PROVIDER</code> and API credentials in server environment variables (<code>.env</code>).
+        To dispatch live messages from your phone number provider, set <code>SMS_PROVIDER</code> (<code>twilio</code>, <code>africastalking</code>, <code>afromessage</code>, or <code>custom</code>) and its API token/SID in server environment variables (<code>.env</code> or Vercel Environment Variables), and enter your sender phone number on the left.
       </p>
     `;
     document.getElementById('runLegacyMigrateBtn').addEventListener('click', async () => {
@@ -2918,6 +2982,8 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
         instituteRegion: document.getElementById('setRegion').value,
         instituteCity: document.getElementById('setCity').value,
         instituteAddress: document.getElementById('setAddress').value,
+        smsFromNumber: document.getElementById('setSmsFromNumber').value,
+        smsSenderId: document.getElementById('setSmsSenderId').value,
         receiptFooterNote: document.getElementById('setReceiptFooter').value,
       }),
     });
@@ -3021,6 +3087,10 @@ async function loadAccountantRegisterView(editAppId = '') {
     document.getElementById('accDueDate').value = today;
     document.getElementById('accStCity').value = 'Addis Ababa';
     updateAccReadonlyCourseFees();
+    if (window.BirrAiTools) {
+      window.BirrAiTools.clearAccountantScanPreview();
+      window.BirrAiTools.applyPendingFaydaIfAny('accountant');
+    }
     return;
   }
 
@@ -3044,6 +3114,9 @@ async function loadAccountantRegisterView(editAppId = '') {
     document.getElementById('accEmgName').value = app.emergencyContactName || '';
     document.getElementById('accEmgPhone').value = app.emergencyContactPhone || '';
     document.getElementById('accEmgRelation').value = app.emergencyContactRelation || '';
+    if (document.getElementById('accStNationalId')) {
+      document.getElementById('accStNationalId').value = app.nationalIdNumber || '';
+    }
     document.getElementById('accDocsNote').value = app.documentsNote || '';
     document.getElementById('accCourseId').value = app.courseId;
     updateAccReadonlyCourseFees();
@@ -3135,6 +3208,7 @@ document.getElementById('accRegisterForm').addEventListener('submit', async (e) 
     emergencyContactName: document.getElementById('accEmgName').value,
     emergencyContactPhone: document.getElementById('accEmgPhone').value,
     emergencyContactRelation: document.getElementById('accEmgRelation').value,
+    nationalIdNumber: document.getElementById('accStNationalId')?.value.trim() || '',
     documentsNote: document.getElementById('accDocsNote').value,
     documents: AppState.accPendingDocs.length > 0 ? AppState.accPendingDocs : undefined,
     courseId: document.getElementById('accCourseId').value,
@@ -3261,6 +3335,7 @@ async function loadAccountantSubmitPaymentView(preselectStudentId = '') {
 
     if (preselectStudentId) sel.value = preselectStudentId;
     await onAccPayStudentChanged();
+    if (window.BirrAiTools) window.BirrAiTools.applyPendingSlipIfAny('accountant');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -3556,144 +3631,15 @@ document.getElementById('accWorkspacePrefsForm')?.addEventListener('submit', (e)
   handleSaveCloudPrefs('acc');
 });
 
-// ================= MULTI-TURN FEE ASSISTANT CHATBOT =================
+// ================= GEMINI AI ASSISTANCE SUITE =================
 function loadAssistantView() {
-  renderChatThread();
+  if (window.BirrAiTools) {
+    window.BirrAiTools.loadAiSuiteStatus();
+    window.BirrAiTools.renderEnhancedChatThread();
+  }
   const input = document.getElementById('chatMessageInput');
   if (input) input.focus();
 }
-
-function renderChatThread() {
-  const thread = document.getElementById('chatThread');
-  if (!thread) return;
-
-  if (!AppState.chatHistory || AppState.chatHistory.length === 0) {
-    thread.innerHTML = `
-      <div class="chat-msg model">
-        <div class="chat-msg-meta">BirrLedger Assistant</div>
-        <div class="chat-bubble">Selam! Ask me about course fees, installment plans (Full, 2-Month, 3-Month, 6-Month, or Custom), Telebirr/bank payment reminders, or approval &amp; receipting workflows. Multi-turn context is maintained across your conversation.</div>
-      </div>
-    `;
-    return;
-  }
-
-  thread.innerHTML = AppState.chatHistory
-    .map((m) => {
-      const who = m.role === 'user' ? (AppState.user ? AppState.user.fullName : 'You') : m.roleLabel || 'BirrLedger Assistant';
-      return `
-        <div class="chat-msg ${m.role === 'user' ? 'user' : 'model'}">
-          <div class="chat-msg-meta">${esc(who)}</div>
-          <div class="chat-bubble">${esc(m.text)}</div>
-        </div>
-      `;
-    })
-    .join('');
-
-  if (AppState.chatBusy) {
-    thread.innerHTML += `
-      <div class="chat-msg model">
-        <div class="chat-msg-meta">BirrLedger Assistant</div>
-        <div class="chat-bubble">Thinking...</div>
-      </div>
-    `;
-  }
-  thread.scrollTop = thread.scrollHeight;
-}
-
-async function submitChatMessage(text) {
-  const clean = String(text || '').trim();
-  if (!clean || AppState.chatBusy) return;
-
-  const errBox = document.getElementById('chatErrorBox');
-  if (errBox) errBox.style.display = 'none';
-
-  const roleId = document.getElementById('chatRoleSelect')?.value || 'fee_advisor';
-  const priorHistory = [...AppState.chatHistory];
-
-  AppState.chatHistory.push({ role: 'user', text: clean });
-  AppState.chatBusy = true;
-  renderChatThread();
-
-  const sendBtn = document.getElementById('chatSendBtn');
-  if (sendBtn) sendBtn.disabled = true;
-
-  try {
-    const res = await apiJson('/api/chat/message', {
-      method: 'POST',
-      body: JSON.stringify({
-        message: clean,
-        history: priorHistory,
-        roleId,
-      }),
-    });
-
-    AppState.chatHistory.push({
-      role: 'model',
-      text: res.reply,
-      roleLabel: res.roleLabel || 'BirrLedger Assistant',
-    });
-
-    if (window.BirrFirebase && window.BirrFirebase.getCurrentUser() && window.BirrFirebase.saveChatMessageToFirestore) {
-      window.BirrFirebase
-        .saveChatMessageToFirestore({
-          role: 'user',
-          assistantRoleId: roleId,
-          content: clean,
-          modelUsed: res.model || 'gemini-4-hydrogen',
-        })
-        .then(() =>
-          window.BirrFirebase.saveChatMessageToFirestore({
-            role: 'model',
-            assistantRoleId: res.roleLabel || roleId,
-            content: res.reply,
-            modelUsed: res.model || 'gemini-4-hydrogen',
-          })
-        )
-        .catch((e) => showFirestoreErrorBanner(e));
-    }
-  } catch (err) {
-    AppState.chatHistory.pop();
-    if (errBox) {
-      errBox.textContent = err.message || 'Failed to get assistant response.';
-      errBox.style.display = 'block';
-    }
-  } finally {
-    AppState.chatBusy = false;
-    if (sendBtn) sendBtn.disabled = false;
-    renderChatThread();
-  }
-}
-
-document.getElementById('chatComposerForm')?.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const input = document.getElementById('chatMessageInput');
-  const val = input.value;
-  input.value = '';
-  submitChatMessage(val);
-});
-
-document.getElementById('chatMessageInput')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    document.getElementById('chatComposerForm').requestSubmit();
-  }
-});
-
-document.querySelectorAll('.chat-prompt-chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    submitChatMessage(chip.dataset.prompt || '');
-  });
-});
-
-document.getElementById('clearChatBtn')?.addEventListener('click', async () => {
-  AppState.chatHistory = [];
-  const errBox = document.getElementById('chatErrorBox');
-  if (errBox) errBox.style.display = 'none';
-  if (window.BirrFirebase && window.BirrFirebase.getCurrentUser() && window.BirrFirebase.clearChatMessagesFromFirestore) {
-    window.BirrFirebase.clearChatMessagesFromFirestore().catch((e) => showFirestoreErrorBanner(e));
-  }
-  renderChatThread();
-});
 
 document.getElementById('accPayStudentQuickSearch')?.addEventListener('input', (e) => {
   renderFilteredStudentSelect('accPayStudentSelect', AppState.students || [], e.target.value);
@@ -3764,5 +3710,197 @@ document.getElementById('quickStudentLookupBtn')?.addEventListener('click', () =
 
 document.getElementById('lookupStudentNameInput')?.addEventListener('input', runGlobalStudentLookup);
 document.getElementById('lookupStudentIdInput')?.addEventListener('input', runGlobalStudentLookup);
+
+// ================= ADMIN: SEND MESSAGE VIA PHONE NUMBER PROVIDER =================
+let activeSourceNotificationId = '';
+
+function updateSendMsgAudienceVisibility() {
+  const mode = document.getElementById('msgTargetMode')?.value || 'single';
+  const singleWrap = document.getElementById('msgSingleStudentWrap');
+  const courseWrap = document.getElementById('msgCourseWrap');
+  if (singleWrap) singleWrap.style.display = mode === 'single' ? '' : 'none';
+  if (courseWrap) courseWrap.style.display = mode === 'course' ? '' : 'none';
+}
+
+function updateSendMsgCharCounter() {
+  const txt = document.getElementById('msgBodyInput')?.value || '';
+  const el = document.getElementById('msgCharCount');
+  if (el) el.textContent = `(${txt.length} chars)`;
+}
+
+async function openSendStudentMessageModal(opts = {}) {
+  if (!AppState.user || AppState.user.role !== 'admin') return;
+  activeSourceNotificationId = opts.notificationId || '';
+
+  const errEl = document.getElementById('sendMsgError');
+  const resWrap = document.getElementById('sendMsgResultsWrap');
+  if (errEl) errEl.style.display = 'none';
+  if (resWrap) {
+    resWrap.style.display = 'none';
+    resWrap.innerHTML = '';
+  }
+
+  try {
+    if (!AppState.students || AppState.students.length === 0) {
+      AppState.students = await apiJson('/api/students');
+    }
+    const notifInfo = await apiJson('/api/notifications?filter=unread');
+    AppState.gateway = notifInfo.gateway;
+  } catch {
+    // non-blocking
+  }
+
+  const gw = AppState.gateway || { sms: { statusMessage: 'Checking...' }, whatsapp: { statusMessage: 'Checking...' } };
+  const banner = document.getElementById('sendMsgGatewayBanner');
+  if (banner) {
+    banner.innerHTML = `
+      <strong>Phone Provider Status:</strong> ${esc(gw.sms?.statusMessage || 'Not configured')} &middot;
+      <strong>WhatsApp:</strong> ${esc(gw.whatsapp?.statusMessage || 'Not configured')}
+    `;
+  }
+
+  const modeEl = document.getElementById('msgTargetMode');
+  if (modeEl) modeEl.value = opts.targetMode || 'single';
+  updateSendMsgAudienceVisibility();
+
+  const searchEl = document.getElementById('msgStudentSearch');
+  if (searchEl) searchEl.value = '';
+  renderFilteredStudentSelect('msgStudentSelect', AppState.students || [], '', opts.studentId || '');
+
+  const tmplEl = document.getElementById('msgTemplateSelect');
+  if (tmplEl) tmplEl.value = opts.template || 'custom';
+
+  const titleEl = document.getElementById('msgTitleInput');
+  if (titleEl) titleEl.value = opts.title || 'Student Phone Notification';
+
+  const bodyEl = document.getElementById('msgBodyInput');
+  if (bodyEl) {
+    bodyEl.value =
+      opts.message ||
+      'Dear {studentName} ({studentCode}), this is a notice from {instituteName} regarding {courseName}. Remaining balance: {balance}.';
+  }
+  updateSendMsgCharCounter();
+  openModal('sendStudentMsgModal');
+}
+
+function sendSmsFromNotification(notifId) {
+  const n = notificationCacheMap.get(notifId);
+  if (!n) return;
+  openSendStudentMessageModal({
+    targetMode: 'single',
+    studentId: n.studentId || '',
+    notificationId: n.id,
+    title: n.title || 'Payment Reminder SMS',
+    message: n.message || '',
+  });
+}
+
+window.openSendStudentMessageModal = openSendStudentMessageModal;
+window.sendSmsFromNotification = sendSmsFromNotification;
+
+document.getElementById('openSendStudentMsgBtn')?.addEventListener('click', () => {
+  openSendStudentMessageModal({ targetMode: 'single' });
+});
+
+document.getElementById('msgTargetMode')?.addEventListener('change', updateSendMsgAudienceVisibility);
+
+document.getElementById('msgStudentSearch')?.addEventListener('input', (e) => {
+  renderFilteredStudentSelect('msgStudentSelect', AppState.students || [], e.target.value);
+});
+
+document.getElementById('msgBodyInput')?.addEventListener('input', updateSendMsgCharCounter);
+
+document.getElementById('msgTemplateSelect')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  const bodyEl = document.getElementById('msgBodyInput');
+  const titleEl = document.getElementById('msgTitleInput');
+  if (!bodyEl) return;
+  if (val === 'fee_reminder') {
+    if (titleEl) titleEl.value = 'Fee Balance Reminder';
+    bodyEl.value =
+      'Dear {studentName} ({studentCode}), friendly reminder from {instituteName}: your remaining fee balance for {courseName} is {balance}. Please settle at the finance office.';
+  } else if (val === 'overdue_notice') {
+    if (titleEl) titleEl.value = 'Overdue Installment Notice';
+    bodyEl.value =
+      'Dear {studentName} ({studentCode}), your {courseName} installment payment of {balance} at {instituteName} is overdue. Please make payment promptly.';
+  } else if (val === 'class_update') {
+    if (titleEl) titleEl.value = 'Training Schedule Notice';
+    bodyEl.value =
+      'Dear {studentName} ({studentCode}), important update from {instituteName} regarding your {courseName} class schedule. Please contact administration for details.';
+  }
+  updateSendMsgCharCounter();
+});
+
+document.getElementById('sendStudentMsgForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('sendMsgError');
+  const resWrap = document.getElementById('sendMsgResultsWrap');
+  const btn = document.getElementById('sendMsgSubmitBtn');
+  errEl.style.display = 'none';
+  resWrap.style.display = 'none';
+
+  const targetMode = document.getElementById('msgTargetMode').value;
+  const studentId = document.getElementById('msgStudentSelect').value;
+  const courseId = document.getElementById('msgCourseSelect').value;
+  const channel = document.getElementById('msgChannel').value;
+  const title = document.getElementById('msgTitleInput').value.trim();
+  const message = document.getElementById('msgBodyInput').value.trim();
+
+  if (targetMode === 'single' && !studentId) {
+    errEl.textContent = 'Please select a student to message.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  try {
+    const res = await apiJson('/api/notifications/send-message', {
+      method: 'POST',
+      body: JSON.stringify({
+        targetMode,
+        studentId,
+        courseId,
+        channel,
+        title,
+        message,
+        notificationId: targetMode === 'single' ? activeSourceNotificationId : '',
+      }),
+    });
+
+    resWrap.innerHTML = `
+      <div class="notice-banner" style="margin:0 0 8px 0;">
+        <strong>${esc(res.message)}</strong><br/>
+        <span style="font-size:12px;">Targeted: ${res.totalTargeted} &middot; Sent: ${res.sentCount} &middot; Failed: ${res.failedCount} &middot; Not Configured: ${res.notConfiguredCount}</span>
+      </div>
+      <div class="table-scroll" style="max-height:180px; border:1px solid var(--border-hairline); border-radius:var(--radius-md);">
+        <table class="data-table">
+          <thead><tr><th>Student</th><th>Phone</th><th>Status</th><th>Detail</th></tr></thead>
+          <tbody>
+            ${(res.results || [])
+              .map(
+                (r) => `
+              <tr>
+                <td>${esc(r.fullName)} <span class="mono" style="font-size:11px; color:var(--text-muted);">(${esc(r.studentCode)})</span></td>
+                <td class="mono">${esc(r.phone)}</td>
+                <td><span class="status-tag ${r.sent ? 'status-paid' : r.channelStatus.includes('NOT_CONFIGURED') ? 'status-partial' : 'status-danger'}">${esc(r.channelStatus.replace(/_/g, ' '))}</span></td>
+                <td style="font-size:12px;">${esc(r.detail || '')}</td>
+              </tr>
+            `
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    resWrap.style.display = 'block';
+    showToast(res.message, res.sentCount > 0 ? 'success' : 'error');
+    if (AppState.currentPage === 'notifications') loadNotificationsView();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.addEventListener('DOMContentLoaded', bootstrapApp);
