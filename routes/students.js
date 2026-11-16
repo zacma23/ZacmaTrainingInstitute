@@ -566,41 +566,55 @@ router.post('/:id/restore', requireRole('admin'), async (req, res) => {
   }
 });
 
-// Delete student (Admin only) — blocks deletion if transactions exist to preserve financial integrity
+// Delete student (Admin full privilege — cleanly deletes student and all linked records inside a transaction with audit log)
 router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
-    const pool = getPool();
-    const [[txnCheck]] = await pool.query('SELECT COUNT(*) AS cnt FROM transactions WHERE studentId = ?', [req.params.id]);
-    if (txnCheck.cnt > 0) {
-      return res.status(409).json({
-        error: 'Cannot permanently delete a student with existing payment transactions. Archive the student instead to preserve financial audit records.',
-      });
-    }
+    const deleted = await withTransaction(async (conn) => {
+      const [rows] = await conn.query('SELECT id, studentCode, fullName, phone FROM students WHERE id = ? LIMIT 1 FOR UPDATE', [req.params.id]);
+      if (rows.length === 0) {
+        const err = new Error('Student not found.');
+        err.status = 404;
+        throw err;
+      }
+      const student = rows[0];
 
-    await withTransaction(async (conn) => {
-      const [rows] = await conn.query('SELECT studentCode, fullName FROM students WHERE id = ? LIMIT 1', [req.params.id]);
-      if (rows.length === 0) throw new Error('Student not found.');
+      // Clear references on registration applications so historical audit applications don't fail FK checks
+      await conn.query(
+        `UPDATE registration_applications
+         SET approvedStudentId = NULL, approvedEnrollmentId = NULL, approvedTransactionId = NULL, approvedReceiptId = NULL
+         WHERE approvedStudentId = ?`,
+        [student.id]
+      );
 
-      await conn.query('DELETE FROM installments WHERE studentId = ?', [req.params.id]);
-      await conn.query('DELETE FROM enrollments WHERE studentId = ?', [req.params.id]);
-      await conn.query('DELETE FROM students WHERE id = ?', [req.params.id]);
+      await conn.query('DELETE FROM notifications WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM attendance WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM receipts WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM transactions WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM payment_submissions WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM installments WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM enrollments WHERE studentId = ?', [student.id]);
+      await conn.query('DELETE FROM students WHERE id = ?', [student.id]);
 
       await recordAuditLog(
         {
           user: req.user,
           action: 'DELETE_STUDENT',
           entityType: 'student',
-          entityId: req.params.id,
-          details: { studentCode: rows[0].studentCode, fullName: rows[0].fullName },
+          entityId: student.id,
+          previousValue: { studentCode: student.studentCode, fullName: student.fullName, phone: student.phone },
+          reason: String((req.body && req.body.reason) || 'Deleted by administrator').trim(),
+          details: { studentCode: student.studentCode, fullName: student.fullName },
           ipAddress: req.ip,
         },
         conn
       );
+
+      return student;
     });
 
-    res.json({ message: 'Student with no transactions deleted cleanly.' });
+    res.json({ message: `Student "${deleted.fullName}" (${deleted.studentCode}) and all linked records deleted.` });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 

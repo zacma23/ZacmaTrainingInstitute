@@ -114,4 +114,47 @@ router.patch('/read-all', async (req, res) => {
   }
 });
 
+// Delete single notification (ADMIN ONLY)
+router.delete('/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT id, type, title FROM notifications WHERE id = ? LIMIT 1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Notification not found.' });
+
+    await pool.query('DELETE FROM notifications WHERE id = ?', [req.params.id]);
+    await recordAuditLog({
+      user: req.user,
+      action: 'DELETE_NOTIFICATION',
+      entityType: 'notification',
+      entityId: req.params.id,
+      previousValue: { type: rows[0].type, title: rows[0].title },
+      ipAddress: req.ip,
+    });
+    res.json({ message: 'Notification deleted.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Clear read or all notifications (ADMIN ONLY)
+router.delete('/', requireRole('admin'), async (req, res) => {
+  try {
+    const pool = getPool();
+    const scopeOnlyRead = String(req.query.onlyRead || '').toLowerCase() === 'true';
+    const [result] = scopeOnlyRead
+      ? await pool.query('DELETE FROM notifications WHERE isRead = 1')
+      : await pool.query('DELETE FROM notifications');
+    await recordAuditLog({
+      user: req.user,
+      action: 'CLEAR_NOTIFICATIONS',
+      entityType: 'notification',
+      details: { onlyRead: scopeOnlyRead, deletedCount: result.affectedRows || 0 },
+      ipAddress: req.ip,
+    });
+    res.json({ message: `Cleared ${result.affectedRows || 0} notification(s).` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

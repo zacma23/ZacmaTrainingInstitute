@@ -207,10 +207,10 @@ function computeEnrollmentFinancials(enrollment, installments = [], transactions
 
 async function generateNextStudentCode(conn) {
   const year = getAddisTodayISO().slice(0, 4);
-  const prefix = `ASTI-${year}-`;
+  const prefix = `ZTI-${year}-`;
   const [[row]] = await conn.query(
-    "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(studentCode, '-', -1) AS UNSIGNED)), 0) AS maxSeq FROM students WHERE studentCode LIKE ?",
-    [`${prefix}%`]
+    "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(studentCode, '-', -1) AS UNSIGNED)), 0) AS maxSeq FROM students WHERE studentCode LIKE ? OR studentCode LIKE ?",
+    [`${prefix}%`, `ASTI-${year}-%`]
   );
   const nextSeq = Number(row.maxSeq || 0) + 1;
   return `${prefix}${String(nextSeq).padStart(4, '0')}`;

@@ -13,7 +13,7 @@ async function openReceiptModal(transactionOrReceiptId) {
 
 function renderReceiptPreview({ receipt, institute }) {
   const area = document.getElementById('printableReceiptArea');
-  const instName = institute.instituteName || 'Addis Skills & Technology Institute';
+  const instName = institute.instituteName || 'Zacma Technology Institute';
   const instPhone = institute.institutePhone || '';
   const instAddress = institute.instituteAddress || 'Addis Ababa, Ethiopia';
   const footerNote = institute.receiptFooterNote || 'Official training fee payment receipt.';
@@ -104,7 +104,7 @@ function downloadCurrentReceiptPdf() {
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text(institute.instituteName || 'Addis Skills & Technology Institute', left, y);
+  doc.text(institute.instituteName || 'Zacma Technology Institute', left, y);
   y += 18;
 
   doc.setFont('helvetica', 'normal');
@@ -219,7 +219,7 @@ function renderConfirmationPreview(data) {
   const sub = data.submission || {};
   const isReg = data.confirmationType === 'REGISTRATION_APPLICATION';
 
-  const instName = inst.instituteName || 'Addis Skills & Technology Institute';
+  const instName = inst.instituteName || 'Zacma Technology Institute';
   const instPhone = inst.institutePhone || '';
   const instAddress = inst.instituteAddress || 'Addis Ababa, Ethiopia';
 
@@ -323,7 +323,7 @@ function downloadCurrentConfirmationPdf() {
 
   doc.setTextColor(15, 23, 42);
   doc.setFontSize(15);
-  doc.text(inst.instituteName || 'Addis Skills & Technology Institute', left, y);
+  doc.text(inst.instituteName || 'Zacma Technology Institute', left, y);
   y += 18;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);

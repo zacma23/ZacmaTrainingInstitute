@@ -300,11 +300,60 @@ router.get('/:id/receipt', async (req, res) => {
   }
 });
 
-// Admin-only explicit void note / never overwrite history (creates audit log & prevents silent deletion)
+// Delete transaction and linked receipt (ADMIN FULL PRIVILEGE — logs complete audit snapshot)
 router.delete('/:id', requireRole('admin'), async (req, res) => {
-  return res.status(403).json({
-    error: 'Financial transactions are immutable audit records and cannot be overwritten or deleted. Contact system auditor or record a fee adjustment if needed.',
-  });
+  try {
+    const deleted = await withTransaction(async (conn) => {
+      const [rows] = await conn.query(
+        'SELECT * FROM transactions WHERE id = ? LIMIT 1 FOR UPDATE',
+        [req.params.id]
+      );
+      if (rows.length === 0) {
+        const err = new Error('Transaction not found.');
+        err.status = 404;
+        throw err;
+      }
+      const txn = rows[0];
+
+      await conn.query(
+        'UPDATE payment_submissions SET approvedTransactionId = NULL, approvedReceiptId = NULL WHERE approvedTransactionId = ?',
+        [txn.id]
+      );
+      await conn.query(
+        'UPDATE registration_applications SET approvedTransactionId = NULL, approvedReceiptId = NULL WHERE approvedTransactionId = ?',
+        [txn.id]
+      );
+
+      await conn.query('DELETE FROM receipts WHERE transactionId = ?', [txn.id]);
+      await conn.query('DELETE FROM transactions WHERE id = ?', [txn.id]);
+
+      await recordAuditLog(
+        {
+          user: req.user,
+          action: 'DELETE_TRANSACTION',
+          entityType: 'transaction',
+          entityId: txn.id,
+          previousValue: {
+            transactionId: txn.transactionId,
+            studentId: txn.studentId,
+            amountPaid: Number(txn.amountPaid),
+            paymentDate: txn.paymentDate,
+            paymentMethod: txn.paymentMethod,
+          },
+          reason: String((req.body && req.body.reason) || 'Deleted by administrator').trim(),
+          details: { transactionCode: txn.transactionId, amountPaid: Number(txn.amountPaid) },
+          ipAddress: req.ip,
+        },
+        conn
+      );
+
+      return txn;
+    });
+
+    res.json({ message: `Transaction ${deleted.transactionId} deleted cleanly.` });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
 });
 
 module.exports = router;

@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
-const { getPool } = require('../config/db');
+const { getPool, withTransaction } = require('../config/db');
 const { authenticate, requireRole, recordAuditLog } = require('../middleware/auth');
 
 const router = express.Router();
@@ -163,6 +163,61 @@ router.get('/audit-logs', async (req, res) => {
     res.json(logs);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE staff/user account (ADMIN ONLY — prevents self-deletion and preserves historical logs)
+router.delete('/users/:id', async (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot delete your own active session account.' });
+    }
+
+    const deleted = await withTransaction(async (conn) => {
+      const [rows] = await conn.query('SELECT id, username, fullName, role FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [req.params.id]);
+      if (rows.length === 0) {
+        const err = new Error('User account not found.');
+        err.status = 404;
+        throw err;
+      }
+      const target = rows[0];
+
+      // Preserve submission records by reassigning non-null submitter FK to performing admin (submittedByName stays intact)
+      await conn.query('UPDATE registration_applications SET submittedByUserId = ? WHERE submittedByUserId = ?', [req.user.id, target.id]);
+      await conn.query('UPDATE application_documents SET uploadedByUserId = ? WHERE uploadedByUserId = ?', [req.user.id, target.id]);
+      await conn.query('UPDATE payment_submissions SET submittedByUserId = ? WHERE submittedByUserId = ?', [req.user.id, target.id]);
+
+      await conn.query('UPDATE registration_applications SET reviewedByUserId = NULL WHERE reviewedByUserId = ?', [target.id]);
+      await conn.query('UPDATE payment_submissions SET reviewedByUserId = NULL WHERE reviewedByUserId = ?', [target.id]);
+      await conn.query('UPDATE students SET registeredByUserId = NULL WHERE registeredByUserId = ?', [target.id]);
+      await conn.query('UPDATE students SET approvedByUserId = NULL WHERE approvedByUserId = ?', [target.id]);
+      await conn.query('UPDATE transactions SET receivedByUserId = NULL WHERE receivedByUserId = ?', [target.id]);
+      await conn.query('UPDATE transactions SET approvedByUserId = NULL WHERE approvedByUserId = ?', [target.id]);
+      await conn.query('UPDATE receipts SET approvedByUserId = NULL WHERE approvedByUserId = ?', [target.id]);
+      await conn.query('UPDATE attendance SET recordedByUserId = NULL WHERE recordedByUserId = ?', [target.id]);
+      await conn.query('UPDATE attendance SET updatedByUserId = NULL WHERE updatedByUserId = ?', [target.id]);
+      await conn.query('UPDATE notifications SET targetUserId = NULL WHERE targetUserId = ?', [target.id]);
+
+      await conn.query('DELETE FROM users WHERE id = ?', [target.id]);
+
+      await recordAuditLog(
+        {
+          user: req.user,
+          action: 'DELETE_USER',
+          entityType: 'user',
+          entityId: target.id,
+          previousValue: { username: target.username, fullName: target.fullName, role: target.role },
+          ipAddress: req.ip,
+        },
+        conn
+      );
+
+      return target;
+    });
+
+    res.json({ message: `User "${deleted.username}" deleted cleanly.` });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

@@ -213,7 +213,7 @@ router.put('/courses/:id', authenticate, requireRole('admin'), async (req, res) 
   }
 });
 
-// Delete course (ADMIN ONLY — safely blocked if enrollments or applications reference it)
+// Delete course (ADMIN ONLY — supports ?force=true to cascade-delete course with linked records)
 router.delete('/courses/:id', authenticate, requireRole('admin'), async (req, res) => {
   try {
     const pool = getPool();
@@ -222,21 +222,62 @@ router.delete('/courses/:id', authenticate, requireRole('admin'), async (req, re
 
     const [[enrCnt]] = await pool.query('SELECT COUNT(*) AS cnt FROM enrollments WHERE courseId = ?', [req.params.id]);
     const [[appCnt]] = await pool.query('SELECT COUNT(*) AS cnt FROM registration_applications WHERE courseId = ?', [req.params.id]);
-    if (enrCnt.cnt > 0 || appCnt.cnt > 0) {
+    const forceDelete = String(req.query.force || '').toLowerCase() === 'true';
+
+    if ((enrCnt.cnt > 0 || appCnt.cnt > 0) && !forceDelete) {
       return res.status(409).json({
-        error: 'Cannot delete a course with existing enrollments or registration applications. Set its status to Inactive instead.',
+        requiresForce: true,
+        enrollmentsCount: enrCnt.cnt,
+        applicationsCount: appCnt.cnt,
+        error: `Course has ${enrCnt.cnt} enrollment(s) and ${appCnt.cnt} application(s). Confirm force delete to remove the course and its linked records, or set status to Inactive.`,
       });
     }
 
-    await pool.query('DELETE FROM courses WHERE id = ?', [req.params.id]);
-    await recordAuditLog({
-      user: req.user,
-      action: 'DELETE_COURSE',
-      entityType: 'course',
-      entityId: req.params.id,
-      previousValue: { code: existing[0].code, name: existing[0].name },
-      ipAddress: req.ip,
-    });
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      if (forceDelete) {
+        const [enrRows] = await conn.query('SELECT id FROM enrollments WHERE courseId = ?', [req.params.id]);
+        const enrIds = enrRows.map((r) => r.id);
+        if (enrIds.length > 0) {
+          await conn.query('DELETE FROM notifications WHERE enrollmentId IN (?)', [enrIds]);
+          await conn.query('DELETE FROM attendance WHERE enrollmentId IN (?)', [enrIds]);
+          await conn.query('DELETE FROM receipts WHERE enrollmentId IN (?)', [enrIds]);
+          await conn.query('DELETE FROM transactions WHERE enrollmentId IN (?)', [enrIds]);
+          await conn.query('DELETE FROM payment_submissions WHERE enrollmentId IN (?)', [enrIds]);
+          await conn.query('DELETE FROM installments WHERE enrollmentId IN (?)', [enrIds]);
+          await conn.query('DELETE FROM enrollments WHERE id IN (?)', [enrIds]);
+        }
+        await conn.query('DELETE FROM attendance WHERE courseId = ?', [req.params.id]);
+
+        const [appRows] = await conn.query('SELECT id FROM registration_applications WHERE courseId = ?', [req.params.id]);
+        const appIds = appRows.map((r) => r.id);
+        if (appIds.length > 0) {
+          await conn.query('DELETE FROM notifications WHERE applicationId IN (?)', [appIds]);
+          await conn.query('DELETE FROM application_documents WHERE applicationId IN (?)', [appIds]);
+          await conn.query('DELETE FROM registration_applications WHERE id IN (?)', [appIds]);
+        }
+      }
+
+      await conn.query('DELETE FROM courses WHERE id = ?', [req.params.id]);
+      await recordAuditLog(
+        {
+          user: req.user,
+          action: 'DELETE_COURSE',
+          entityType: 'course',
+          entityId: req.params.id,
+          previousValue: { code: existing[0].code, name: existing[0].name, forceDelete },
+          ipAddress: req.ip,
+        },
+        conn
+      );
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback().catch(() => {});
+      throw txErr;
+    } finally {
+      conn.release();
+    }
 
     res.json({ message: 'Course deleted successfully.' });
   } catch (err) {

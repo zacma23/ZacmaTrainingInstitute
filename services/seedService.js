@@ -6,10 +6,10 @@ const { getAddisTodayISO, addDaysISO, addMonthsISO } = require('../utils/ethiopi
 const { generateInstallmentSchedule } = require('./feeService');
 
 const DEFAULT_SETTINGS = {
-  instituteName: 'Addis Skills & Technology Institute',
-  instituteShortName: 'ASTI Ethiopia',
+  instituteName: 'Zacma Technology Institute',
+  instituteShortName: 'ZTI Ethiopia',
   institutePhone: '+251 11 667 8900',
-  instituteEmail: 'finance@addisskills.edu.et',
+  instituteEmail: 'finance@zacmatech.edu.et',
   instituteRegion: 'Addis Ababa',
   instituteCity: 'Addis Ababa',
   instituteAddress: 'Bole Sub-City, Woreda 03, Addis Ababa, Ethiopia',
@@ -155,13 +155,22 @@ async function ensureBaselineCatalog() {
   const [roleRows] = await pool.query('SELECT id, code FROM roles');
   const roleIdByCode = Object.fromEntries(roleRows.map((r) => [r.code, r.id]));
 
-  // 1. Ensure default settings
+  // 1. Ensure default settings & upgrade legacy default institute branding
   for (const [key, val] of Object.entries(DEFAULT_SETTINGS)) {
     await pool.query(
       'INSERT IGNORE INTO settings (settingKey, settingValue, updatedBy) VALUES (?, ?, ?)',
       [key, val, 'system']
     );
   }
+  await pool.query(
+    "UPDATE settings SET settingValue = 'Zacma Technology Institute' WHERE settingKey = 'instituteName' AND settingValue = 'Addis Skills & Technology Institute'"
+  );
+  await pool.query(
+    "UPDATE settings SET settingValue = 'ZTI Ethiopia' WHERE settingKey = 'instituteShortName' AND settingValue = 'ASTI Ethiopia'"
+  );
+  await pool.query(
+    "UPDATE settings SET settingValue = 'finance@zacmatech.edu.et' WHERE settingKey = 'instituteEmail' AND settingValue = 'finance@addisskills.edu.et'"
+  );
 
   // 2. Ensure default payment plans
   for (const plan of DEFAULT_PAYMENT_PLANS) {
@@ -209,7 +218,7 @@ async function ensureBaselineCatalog() {
       await pool.query(
         `INSERT INTO users (id, username, fullName, email, phone, passwordHash, role, roleId, isActive)
          VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, 1)`,
-        [randomUUID(), initUser, initName, 'admin@addisskills.edu.et', '+251911000001', passwordHash, roleIdByCode.admin || null]
+        [randomUUID(), initUser, initName, 'admin@zacmatech.edu.et', '+251911000001', passwordHash, roleIdByCode.admin || null]
       );
       logger.info('Bootstrapped initial admin account from environment config', { username: initUser });
     }
@@ -227,7 +236,7 @@ async function ensureBaselineCatalog() {
       await pool.query(
         `INSERT IGNORE INTO users (id, username, fullName, email, phone, passwordHash, role, roleId, isActive)
          VALUES (?, ?, ?, ?, ?, ?, 'accountant', ?, 1)`,
-        [randomUUID(), accUser, accName, 'accountant@addisskills.edu.et', '+251911000002', passwordHash, roleIdByCode.accountant || null]
+        [randomUUID(), accUser, accName, 'accountant@zacmatech.edu.et', '+251911000002', passwordHash, roleIdByCode.accountant || null]
       );
       logger.info('Bootstrapped initial accountant account from environment config', { username: accUser });
     }
@@ -264,7 +273,7 @@ async function seedRealisticEthiopianData() {
 
   const sampleRecords = [
     {
-      code: `ASTI-${year}-0001`,
+      code: `ZTI-${year}-0001`,
       fullName: 'Abebe Kebede',
       gender: 'Male',
       phone: '+251911234567',
@@ -286,7 +295,7 @@ async function seedRealisticEthiopianData() {
       ],
     },
     {
-      code: `ASTI-${year}-0002`,
+      code: `ZTI-${year}-0002`,
       fullName: 'Tigist Alemu',
       gender: 'Female',
       phone: '+251922345678',
@@ -307,7 +316,7 @@ async function seedRealisticEthiopianData() {
       ],
     },
     {
-      code: `ASTI-${year}-0003`,
+      code: `ZTI-${year}-0003`,
       fullName: 'Dawit Mekonnen',
       gender: 'Male',
       phone: '+251913456789',
@@ -328,7 +337,7 @@ async function seedRealisticEthiopianData() {
       ],
     },
     {
-      code: `ASTI-${year}-0004`,
+      code: `ZTI-${year}-0004`,
       fullName: 'Selamawit Bekele',
       gender: 'Female',
       phone: '+251914567890',
@@ -349,7 +358,7 @@ async function seedRealisticEthiopianData() {
       ],
     },
     {
-      code: `ASTI-${year}-0005`,
+      code: `ZTI-${year}-0005`,
       fullName: 'Bereket Haile',
       gender: 'Male',
       phone: '+251933112233',
@@ -368,7 +377,7 @@ async function seedRealisticEthiopianData() {
       payments: [],
     },
     {
-      code: `ASTI-${year}-0006`,
+      code: `ZTI-${year}-0006`,
       fullName: 'Hanna Girma',
       gender: 'Female',
       phone: '+251944556677',
@@ -389,7 +398,7 @@ async function seedRealisticEthiopianData() {
       ],
     },
     {
-      code: `ASTI-${year}-0007`,
+      code: `ZTI-${year}-0007`,
       fullName: 'Yohannes Tesfaye',
       gender: 'Male',
       phone: '+251911887766',
@@ -410,7 +419,7 @@ async function seedRealisticEthiopianData() {
       ],
     },
     {
-      code: `ASTI-${year}-0008`,
+      code: `ZTI-${year}-0008`,
       fullName: 'Meron Tadesse',
       gender: 'Female',
       phone: '+251966778899',

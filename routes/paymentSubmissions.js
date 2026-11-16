@@ -464,4 +464,45 @@ router.post('/:id/reject', requireRole('admin'), async (req, res) => {
   }
 });
 
+// DELETE payment submission (ADMIN ONLY)
+router.delete('/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const deleted = await withTransaction(async (conn) => {
+      const [subs] = await conn.query('SELECT * FROM payment_submissions WHERE id = ? LIMIT 1 FOR UPDATE', [req.params.id]);
+      if (subs.length === 0) {
+        const err = new Error('Payment submission not found.');
+        err.status = 404;
+        throw err;
+      }
+      const sub = subs[0];
+
+      await conn.query('DELETE FROM notifications WHERE paymentSubmissionId = ?', [sub.id]);
+      await conn.query('UPDATE transactions SET submissionId = NULL WHERE submissionId = ?', [sub.id]);
+      await conn.query('DELETE FROM payment_submissions WHERE id = ?', [sub.id]);
+
+      await recordAuditLog(
+        {
+          user: req.user,
+          action: 'DELETE_PAYMENT_SUBMISSION',
+          entityType: 'payment_submission',
+          entityId: sub.id,
+          previousValue: {
+            submissionRef: sub.submissionRef,
+            amountSubmitted: Number(sub.amountSubmitted),
+            status: sub.status,
+          },
+          ipAddress: req.ip,
+        },
+        conn
+      );
+
+      return sub;
+    });
+
+    res.json({ message: `Payment submission ${deleted.submissionRef} deleted.` });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -17,8 +17,8 @@ router.get('/public', async (req, res) => {
     );
     const settings = Object.fromEntries(rows.map((r) => [r.settingKey, r.settingValue]));
     res.json({
-      instituteName: settings.instituteName || 'Addis Skills & Technology Institute',
-      instituteShortName: settings.instituteShortName || 'ASTI Ethiopia',
+      instituteName: settings.instituteName || 'Zacma Technology Institute',
+      instituteShortName: settings.instituteShortName || 'ZTI Ethiopia',
       currency: settings.currency || 'ETB',
       timezone: settings.timezone || 'Africa/Addis_Ababa',
       regions: ETHIOPIAN_REGIONS,

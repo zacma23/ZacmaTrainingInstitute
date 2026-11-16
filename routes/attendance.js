@@ -242,4 +242,32 @@ router.get('/report', async (req, res) => {
   }
 });
 
+// DELETE attendance record (ADMIN ONLY)
+router.delete('/:id', async (req, res) => {
+  try {
+    const pool = getPool();
+    const [rows] = await pool.query('SELECT * FROM attendance WHERE id = ? LIMIT 1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Attendance record not found.' });
+
+    await pool.query('DELETE FROM attendance WHERE id = ?', [req.params.id]);
+    await recordAuditLog({
+      user: req.user,
+      action: 'DELETE_ATTENDANCE',
+      entityType: 'attendance',
+      entityId: req.params.id,
+      previousValue: {
+        studentId: rows[0].studentId,
+        courseId: rows[0].courseId,
+        attendanceDate: rows[0].attendanceDate,
+        status: rows[0].status,
+      },
+      ipAddress: req.ip,
+    });
+
+    res.json({ message: 'Attendance record deleted.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

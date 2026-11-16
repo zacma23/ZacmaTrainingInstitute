@@ -27,7 +27,7 @@ router.post('/message', async (req, res) => {
     const instituteName =
       settingRows.length > 0 && settingRows[0].settingValue
         ? settingRows[0].settingValue
-        : 'Addis Skills & Technology Institute';
+        : 'Zacma Technology Institute';
 
     const [courses] = await pool.query(
       "SELECT code, name, durationValue, durationUnit, registrationFee, defaultFee FROM courses WHERE status = 'Active' ORDER BY name ASC LIMIT 20"

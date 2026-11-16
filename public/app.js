@@ -819,6 +819,7 @@ async function loadStudents() {
                 ? `<button type="button" class="btn btn-secondary btn-xs" onclick="archiveStudent('${s.id}', '${esc(s.fullName)}')">Archive</button>`
                 : `<button type="button" class="btn btn-primary btn-xs" onclick="restoreStudent('${s.id}')">Restore</button>`
             }
+            <button type="button" class="btn btn-danger btn-xs" onclick="deleteStudent('${s.id}', '${esc(s.fullName)}', '${esc(s.studentCode)}')">Delete</button>
           </div>
         </td>
       </tr>
@@ -1034,6 +1035,30 @@ async function restoreStudent(id) {
   }
 }
 
+async function deleteStudent(id, name, code = '') {
+  const ok = await askConfirm({
+    title: 'Permanently Delete Student',
+    message: `Permanently delete "${name}"${code ? ` (${code})` : ''} and ALL linked enrollments, installments, attendance logs, payment records, and receipts? This action is logged in the audit trail and cannot be undone.`,
+    okLabel: 'Delete Student',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await apiJson(`/api/students/${id}`, { method: 'DELETE' });
+    showToast(res.message || 'Student deleted cleanly.', 'success');
+    if (document.getElementById('profileModal').classList.contains('open')) {
+      closeModal('profileModal');
+    }
+    if (document.getElementById('studentLookupModal').classList.contains('open')) {
+      runGlobalStudentLookup();
+    }
+    loadStudents();
+    refreshRoleBadges();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 async function viewStudentProfile(id) {
   try {
     const s = await apiJson(`/api/students/${id}`);
@@ -1056,6 +1081,8 @@ async function viewStudentProfile(id) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h4 style="font-size:14px;">Installment Schedule</h4>
         <div style="display:flex; gap:8px;">
+          ${isAdmin ? `<button type="button" class="btn btn-secondary btn-xs" onclick="closeModal('profileModal'); openEditStudent('${s.id}')">Edit Student</button>` : ''}
+          ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteStudent('${s.id}', '${esc(s.fullName)}', '${esc(s.studentCode)}')">Delete Student</button>` : ''}
           ${isAdmin && s.enrollmentId ? `<button type="button" class="btn btn-secondary btn-xs" onclick="openAdjustInstallments('${s.id}')">Adjust Schedule</button>` : ''}
           ${
             s.remainingBalance > 0
@@ -1112,7 +1139,12 @@ async function viewStudentProfile(id) {
                       <td>${esc(t.paymentMethod)}</td>
                       <td>${esc(t.transactionReference || '—')}</td>
                       <td>${esc(t.receivedByName)}</td>
-                      <td><button type="button" class="btn btn-secondary btn-xs" onclick="openReceiptModal('${t.id}')">Receipt</button></td>
+                      <td>
+                        <div class="row-actions">
+                          <button type="button" class="btn btn-secondary btn-xs" onclick="openReceiptModal('${t.id}')">Receipt</button>
+                          <button type="button" class="btn btn-danger btn-xs" onclick="deleteTransaction('${t.id}', '${esc(t.transactionId)}', ${t.amountPaid}, '${s.id}')">Delete</button>
+                        </div>
+                      </td>
                     </tr>
                   `
                       )
@@ -1164,6 +1196,7 @@ window.viewStudentProfile = viewStudentProfile;
 window.openEditStudent = openEditStudent;
 window.archiveStudent = archiveStudent;
 window.restoreStudent = restoreStudent;
+window.deleteStudent = deleteStudent;
 
 // ================= ADMIN 3. STUDENT REGISTRATION APPROVAL CENTER =================
 async function loadRegistrationApprovals() {
@@ -1208,6 +1241,7 @@ async function loadRegistrationApprovals() {
                 ? `<button type="button" class="btn btn-secondary btn-xs" onclick="openReceiptModal('${a.approvedTransactionId}')">Receipt</button>`
                 : ''
             }
+            <button type="button" class="btn btn-danger btn-xs" onclick="deleteApplication('${a.id}', '${esc(a.applicationNumber)}', '${esc(a.fullName)}')">Delete</button>
           </div>
         </td>
       </tr>
@@ -1473,7 +1507,7 @@ window.openEditCourse = openEditCourse;
 async function deleteCourse(id, name) {
   const ok = await askConfirm({
     title: 'Delete Course',
-    message: `Permanently delete "${name}"? Courses with existing enrollments or applications cannot be deleted and should be marked Inactive instead.`,
+    message: `Delete course "${name}"?`,
     okLabel: 'Delete Course',
     danger: true,
   });
@@ -1484,10 +1518,67 @@ async function deleteCourse(id, name) {
     await loadSharedCatalogs();
     loadCourses();
   } catch (err) {
+    if (err.status === 409 && err.data?.requiresForce) {
+      const forceOk = await askConfirm({
+        title: 'Force Delete Course & Linked Records',
+        message: `${err.message} Do you want to permanently force-delete "${name}" along with its ${err.data.enrollmentsCount} enrollment(s) and ${err.data.applicationsCount} application(s)?`,
+        okLabel: 'Force Delete Course',
+        danger: true,
+      });
+      if (!forceOk) return;
+      try {
+        await apiJson(`/api/courses/${id}?force=true`, { method: 'DELETE' });
+        showToast('Course and linked records force-deleted.', 'success');
+        await loadSharedCatalogs();
+        loadCourses();
+        return;
+      } catch (forceErr) {
+        showToast(forceErr.message, 'error');
+        return;
+      }
+    }
     showToast(err.message, 'error');
   }
 }
 window.deleteCourse = deleteCourse;
+
+async function deleteApplication(id, appNo, fullName) {
+  const ok = await askConfirm({
+    title: 'Delete Registration Application',
+    message: `Permanently delete registration application ${appNo} (${fullName}) and any uploaded application documents?`,
+    okLabel: 'Delete Application',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await apiJson(`/api/applications/${id}`, { method: 'DELETE' });
+    showToast(res.message || 'Application deleted.', 'success');
+    loadRegistrationApprovals();
+    refreshRoleBadges();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+window.deleteApplication = deleteApplication;
+
+async function deletePaymentSubmission(id, refNo, amount) {
+  const ok = await askConfirm({
+    title: 'Delete Payment Submission',
+    message: `Permanently delete payment submission ${refNo} (${fmtETB(amount)})?`,
+    okLabel: 'Delete Submission',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await apiJson(`/api/payment-submissions/${id}`, { method: 'DELETE' });
+    showToast(res.message || 'Payment submission deleted.', 'success');
+    loadPaymentApprovals();
+    refreshRoleBadges();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+window.deletePaymentSubmission = deletePaymentSubmission;
 
 document.getElementById('courseForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1714,8 +1805,9 @@ async function loadPaymentApprovals() {
             `
                 : p.approvedTransactionId
                   ? `<button type="button" class="btn btn-secondary btn-xs" onclick="openReceiptModal('${p.approvedTransactionId}')">Receipt (${esc(p.approvedReceiptNumber || '')})</button>`
-                  : '<span style="font-size:12px; color:var(--text-muted);">Processed</span>'
+                  : ''
             }
+            <button type="button" class="btn btn-danger btn-xs" onclick="deletePaymentSubmission('${p.id}', '${esc(p.submissionRef)}', ${p.amountSubmitted})">Delete</button>
           </div>
         </td>
       </tr>
@@ -2030,7 +2122,12 @@ async function fetchAndRenderTransactions() {
         <td>${esc(t.paymentMethod)}</td>
         <td>${esc(t.transactionReference || '—')}</td>
         <td>${esc(t.receivedByName)}</td>
-        <td><button type="button" class="btn btn-secondary btn-xs" onclick="openReceiptModal('${t.id}')">Receipt</button></td>
+        <td>
+          <div class="row-actions">
+            <button type="button" class="btn btn-secondary btn-xs" onclick="openReceiptModal('${t.id}')">Receipt</button>
+            <button type="button" class="btn btn-danger btn-xs" onclick="deleteTransaction('${t.id}', '${esc(t.transactionId)}', ${t.amountPaid})">Delete</button>
+          </div>
+        </td>
       </tr>
     `
       )
@@ -2039,6 +2136,32 @@ async function fetchAndRenderTransactions() {
     showToast(err.message, 'error');
   }
 }
+
+async function deleteTransaction(id, txnCode, amount, refreshStudentId = '') {
+  const ok = await askConfirm({
+    title: 'Delete Payment Transaction',
+    message: `Permanently delete transaction ${txnCode} (${fmtETB(amount)}) and its linked receipt? The student's remaining balance will automatically recalculate.`,
+    okLabel: 'Delete Transaction',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await apiJson(`/api/transactions/${id}`, { method: 'DELETE' });
+    showToast(res.message || 'Transaction deleted.', 'success');
+    if (refreshStudentId && document.getElementById('profileModal').classList.contains('open')) {
+      await viewStudentProfile(refreshStudentId);
+    }
+    if (document.getElementById('page-transactions').classList.contains('active')) {
+      fetchAndRenderTransactions();
+    }
+    if (document.getElementById('page-students').classList.contains('active')) {
+      loadStudents();
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+window.deleteTransaction = deleteTransaction;
 
 ['txnSearchInput', 'txnStudentFilter', 'txnMethodFilter', 'txnStartDate', 'txnEndDate'].forEach((id) => {
   document.getElementById(id).addEventListener(id === 'txnSearchInput' ? 'input' : 'change', fetchAndRenderTransactions);
@@ -2263,7 +2386,7 @@ async function loadAttendanceReport() {
     const histBody = document.getElementById('attHistoryBody');
     histBody.innerHTML =
       data.history.length === 0
-        ? '<tr><td colspan="6" class="empty-state-box">No attendance log entries found.</td></tr>'
+        ? '<tr><td colspan="7" class="empty-state-box">No attendance log entries found.</td></tr>'
         : data.history
             .map(
               (h) => `
@@ -2274,6 +2397,7 @@ async function loadAttendanceReport() {
             <td><span class="status-tag ${statusTagClass(h.status)}">${esc(h.status)}</span></td>
             <td style="font-size:12.5px;">${esc(h.notes || '')}${h.editReason ? ` <em style="color:var(--status-warn);">[Edit: ${esc(h.editReason)}]</em>` : ''}</td>
             <td>${esc(h.recordedByName || '—')}</td>
+            <td><button type="button" class="btn btn-danger btn-xs" onclick="deleteAttendanceRecord('${h.id}')">Delete</button></td>
           </tr>
         `
             )
@@ -2282,6 +2406,24 @@ async function loadAttendanceReport() {
     showToast(err.message, 'error');
   }
 }
+
+async function deleteAttendanceRecord(id) {
+  const ok = await askConfirm({
+    title: 'Delete Attendance Entry',
+    message: 'Delete this attendance log entry permanently?',
+    okLabel: 'Delete Entry',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    await apiJson(`/api/attendance/${id}`, { method: 'DELETE' });
+    showToast('Attendance entry deleted.', 'success');
+    loadAttendanceReport();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+window.deleteAttendanceRecord = deleteAttendanceRecord;
 
 document.querySelectorAll('#attendanceTabs .tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -2410,6 +2552,7 @@ async function loadNotificationsView() {
           <div class="row-actions">
             ${!n.isRead ? `<button type="button" class="btn btn-secondary btn-xs" onclick="markNotificationRead('${n.id}')">Mark Read</button>` : ''}
             ${n.studentId ? `<button type="button" class="btn btn-secondary btn-xs" onclick="viewStudentProfile('${n.studentId}')">Student</button>` : ''}
+            ${AppState.user?.role === 'admin' ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteNotification('${n.id}')">Delete</button>` : ''}
           </div>
         </td>
       </tr>
@@ -2426,6 +2569,18 @@ async function markNotificationRead(id) {
   loadNotificationsView();
 }
 window.markNotificationRead = markNotificationRead;
+
+async function deleteNotification(id) {
+  try {
+    await apiJson(`/api/notifications/${id}`, { method: 'DELETE' });
+    showToast('Notification deleted.', 'success');
+    loadNotificationsView();
+    refreshRoleBadges();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+window.deleteNotification = deleteNotification;
 
 document.getElementById('notifReadFilter').addEventListener('change', loadNotificationsView);
 document.getElementById('notifTypeFilter').addEventListener('change', loadNotificationsView);
@@ -2554,6 +2709,11 @@ async function loadUsersView() {
                 : '<span style="font-size:12px; color:var(--text-muted);">Current session</span>'
             }
             <button type="button" class="btn btn-secondary btn-xs" onclick="resetStaffPassword('${u.id}', '${esc(u.username)}')">Reset Password</button>
+            ${
+              u.id !== AppState.user?.id
+                ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteUserAccount('${u.id}', '${esc(u.username)}', '${esc(u.fullName)}')">Delete</button>`
+                : ''
+            }
           </div>
         </td>
       </tr>
@@ -2604,6 +2764,24 @@ async function toggleUserActive(id, nextState) {
   }
 }
 window.toggleUserActive = toggleUserActive;
+
+async function deleteUserAccount(id, username, fullName) {
+  const ok = await askConfirm({
+    title: 'Delete Staff Account',
+    message: `Permanently delete staff account "${fullName}" (@${username})? Historical submissions and logs created by this account will be preserved.`,
+    okLabel: 'Delete User',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const res = await apiJson(`/api/admin/users/${id}`, { method: 'DELETE' });
+    showToast(res.message || 'User deleted.', 'success');
+    loadUsersView();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+window.deleteUserAccount = deleteUserAccount;
 
 document.getElementById('openNewUserBtn').addEventListener('click', () => {
   document.getElementById('userForm').reset();
@@ -3556,6 +3734,11 @@ async function runGlobalStudentLookup() {
             ${
               s.remainingBalance > 0
                 ? `<button type="button" class="btn btn-primary btn-xs" onclick="closeModal('studentLookupModal'); navigateTo('${isAdmin ? 'record-payment' : 'acc-submit-payment'}', { studentId: '${s.id}' })">${isAdmin ? 'Pay' : 'Submit Pay'}</button>`
+                : ''
+            }
+            ${
+              isAdmin
+                ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteStudent('${s.id}', '${esc(s.fullName)}', '${esc(s.studentCode)}')">Delete</button>`
                 : ''
             }
           </div>

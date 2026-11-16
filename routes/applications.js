@@ -1001,4 +1001,41 @@ router.post('/:id/request-correction', requireRole('admin'), async (req, res) =>
   }
 });
 
+// DELETE registration application (ADMIN ONLY)
+router.delete('/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const deleted = await withTransaction(async (conn) => {
+      const [apps] = await conn.query('SELECT * FROM registration_applications WHERE id = ? LIMIT 1 FOR UPDATE', [req.params.id]);
+      if (apps.length === 0) {
+        const err = new Error('Registration application not found.');
+        err.status = 404;
+        throw err;
+      }
+      const app = apps[0];
+
+      await conn.query('DELETE FROM notifications WHERE applicationId = ?', [app.id]);
+      await conn.query('DELETE FROM application_documents WHERE applicationId = ?', [app.id]);
+      await conn.query('DELETE FROM registration_applications WHERE id = ?', [app.id]);
+
+      await recordAuditLog(
+        {
+          user: req.user,
+          action: 'DELETE_APPLICATION',
+          entityType: 'registration_application',
+          entityId: app.id,
+          previousValue: { applicationNumber: app.applicationNumber, fullName: app.fullName, status: app.status },
+          ipAddress: req.ip,
+        },
+        conn
+      );
+
+      return app;
+    });
+
+    res.json({ message: `Registration application ${deleted.applicationNumber} deleted.` });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 module.exports = router;
