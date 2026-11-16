@@ -1,0 +1,504 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==================== PRIMITIVE HELPERS ====================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedSignedIn() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedSignedIn() && request.auth.uid == userId;
+    }
+
+    // Bootstrapped runtime admin (zero DB read - safe for list queries)
+    function isBootstrappedAdmin() {
+      return isVerifiedSignedIn() && request.auth.token.email == 'zekimuluken@gmail.com';
+    }
+
+    // Full admin check for single-document operations (get/create/update/delete)
+    function isAdmin() {
+      return isVerifiedSignedIn() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // ==================== VALIDATION BLUEPRINTS ====================
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'isActive', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'role', 'isActive', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.role is string && data.role in ['admin', 'accountant', 'staff']
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'phone', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() <= 180
+        && data.phone is string && data.phone.size() <= 30
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPreference(data) {
+      return data.keys().hasAll(['uid', 'defaultLandingPage', 'compactTables', 'preferredPaymentMethod', 'savedNote', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'defaultLandingPage', 'compactTables', 'preferredPaymentMethod', 'savedNote', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.defaultLandingPage is string && data.defaultLandingPage.size() >= 1 && data.defaultLandingPage.size() <= 64
+        && data.compactTables is bool
+        && data.preferredPaymentMethod is string && data.preferredPaymentMethod in ['Cash', 'Bank Transfer', 'Mobile Money']
+        && data.savedNote is string && data.savedNote.size() <= 500
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRegistry(data) {
+      return data.keys().hasAll(['uid', 'email', 'grantedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'grantedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 180
+        && isValidId(data.grantedBy)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll([
+          'courseId', 'ownerUid', 'code', 'name', 'category',
+          'durationValue', 'durationUnit', 'registrationFee', 'defaultFee',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'courseId', 'ownerUid', 'code', 'name', 'category',
+          'durationValue', 'durationUnit', 'registrationFee', 'defaultFee',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.courseId)
+        && isValidId(data.ownerUid)
+        && data.code is string && data.code.size() >= 2 && data.code.size() <= 32
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 140
+        && data.category is string && data.category.size() <= 100
+        && data.durationValue is number && data.durationValue > 0 && data.durationValue <= 100
+        && data.durationUnit is string && data.durationUnit in ['weeks', 'months']
+        && data.registrationFee is number && data.registrationFee >= 0
+        && data.defaultFee is number && data.defaultFee >= 0
+        && data.status is string && data.status in ['Active', 'Archived']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll([
+          'studentId', 'ownerUid', 'studentCode', 'fullName', 'phone', 'email',
+          'courseName', 'status', 'totalCourseFee', 'totalPaid', 'balance',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'studentId', 'ownerUid', 'studentCode', 'fullName', 'phone', 'email',
+          'courseName', 'status', 'totalCourseFee', 'totalPaid', 'balance',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.studentId)
+        && isValidId(data.ownerUid)
+        && data.studentCode is string && data.studentCode.size() >= 2 && data.studentCode.size() <= 40
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 140
+        && data.phone is string && data.phone.size() <= 30
+        && data.email is string && data.email.size() <= 180
+        && data.courseName is string && data.courseName.size() <= 140
+        && data.status is string && data.status in ['Active', 'Graduated', 'Suspended', 'Inactive']
+        && data.totalCourseFee is number && data.totalCourseFee >= 0
+        && data.totalPaid is number && data.totalPaid >= 0
+        && data.balance is number && data.balance >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRegistrationApplication(data) {
+      return data.keys().hasAll([
+          'applicationId', 'submittedByUid', 'studentName', 'phone',
+          'courseName', 'paymentPlan', 'status', 'reviewComment',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'applicationId', 'submittedByUid', 'studentName', 'phone',
+          'courseName', 'paymentPlan', 'status', 'reviewComment',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.applicationId)
+        && isValidId(data.submittedByUid)
+        && data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 140
+        && data.phone is string && data.phone.size() <= 30
+        && data.courseName is string && data.courseName.size() <= 140
+        && data.paymentPlan is string && data.paymentPlan.size() <= 40
+        && data.status is string && data.status in ['PENDING_ADMIN_APPROVAL', 'CORRECTION_REQUIRED', 'APPROVED', 'REJECTED']
+        && data.reviewComment is string && data.reviewComment.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPaymentSubmission(data) {
+      return data.keys().hasAll([
+          'submissionId', 'submittedByUid', 'studentCode', 'studentName',
+          'amount', 'paymentMethod', 'referenceNo', 'status', 'reviewComment',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'submissionId', 'submittedByUid', 'studentCode', 'studentName',
+          'amount', 'paymentMethod', 'referenceNo', 'status', 'reviewComment',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.submissionId)
+        && isValidId(data.submittedByUid)
+        && data.studentCode is string && data.studentCode.size() <= 40
+        && data.studentName is string && data.studentName.size() <= 140
+        && data.amount is number && data.amount > 0
+        && data.paymentMethod is string && data.paymentMethod in ['Cash', 'Bank Transfer', 'Mobile Money']
+        && data.referenceNo is string && data.referenceNo.size() <= 120
+        && data.status is string && data.status in ['PENDING', 'APPROVED', 'REJECTED']
+        && data.reviewComment is string && data.reviewComment.size() <= 500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'notificationId', 'ownerUid', 'targetUid', 'type',
+          'title', 'message', 'isRead', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'notificationId', 'ownerUid', 'targetUid', 'type',
+          'title', 'message', 'isRead', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.notificationId)
+        && isValidId(data.ownerUid)
+        && isValidId(data.targetUid)
+        && data.type is string && data.type.size() <= 50
+        && data.title is string && data.title.size() <= 160
+        && data.message is string && data.message.size() <= 500
+        && data.isRead is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll([
+          'logId', 'actorUid', 'action', 'entityType', 'entityId', 'summary', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'logId', 'actorUid', 'action', 'entityType', 'entityId', 'summary', 'createdAt'
+        ])
+        && isValidId(data.logId)
+        && isValidId(data.actorUid)
+        && data.action is string && data.action.size() <= 80
+        && data.entityType is string && data.entityType.size() <= 60
+        && data.entityId is string && data.entityId.size() <= 128
+        && data.summary is string && data.summary.size() <= 500
+        && data.createdAt is timestamp;
+    }
+
+    // ==================== COLLECTION MATCH BLOCKS ====================
+
+    // 1. Admins Registry
+    match /admins/{adminId} {
+      allow get: if isVerifiedSignedIn() && isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if isVerifiedSignedIn()
+        && isValidId(adminId)
+        && isValidAdminRegistry(incoming())
+        && incoming().uid == adminId
+        && incoming().createdAt == request.time
+        && (
+          (isBootstrappedAdmin() && adminId == request.auth.uid && incoming().grantedBy == request.auth.uid) ||
+          isAdmin()
+        );
+      allow update: if false;
+      allow delete: if isVerifiedSignedIn() && isValidId(adminId) && isAdmin() && adminId != request.auth.uid;
+    }
+
+    // 2. Users (Non-PII profile)
+    match /users/{userId} {
+      allow get: if isVerifiedSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.uid == request.auth.uid);
+      allow create: if isVerifiedSignedIn()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isOwner(userId) && incoming().isActive == true && (
+            incoming().role == 'staff' ||
+            (isBootstrappedAdmin() && incoming().role == 'admin')
+          )) ||
+          isAdmin()
+        );
+      allow update: if isVerifiedSignedIn()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])) ||
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'isActive', 'updatedAt']))
+        );
+      allow delete: if isVerifiedSignedIn() && isValidId(userId) && isAdmin();
+
+      // 3. Isolated User PII Subcollection (Master Gate + Atomicity)
+      match /private/{docId} {
+        allow get: if isVerifiedSignedIn()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && (isOwner(userId) || isAdmin())
+          && get(/databases/$(database)/documents/users/$(userId)).data.uid == userId;
+        allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.uid == request.auth.uid);
+        allow create: if isVerifiedSignedIn()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == userId
+          && incoming().updatedAt == request.time
+          && (isOwner(userId) || isAdmin())
+          && existsAfter(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedSignedIn()
+          && isValidId(userId)
+          && isValidId(docId)
+          && docId == 'info'
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)).data.uid == userId
+          && (
+            (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'updatedAt'])) ||
+            (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'updatedAt']))
+          );
+        allow delete: if isVerifiedSignedIn() && isValidId(userId) && isValidId(docId) && isAdmin();
+      }
+
+      // 4. User Workspace Preferences Subcollection (Master Gate + Atomicity)
+      match /preferences/{prefId} {
+        allow get: if isVerifiedSignedIn()
+          && isValidId(userId)
+          && isValidId(prefId)
+          && prefId == 'workspace'
+          && (isOwner(userId) || isAdmin())
+          && get(/databases/$(database)/documents/users/$(userId)).data.uid == userId;
+        allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.uid == request.auth.uid);
+        allow create: if isVerifiedSignedIn()
+          && isValidId(userId)
+          && isValidId(prefId)
+          && prefId == 'workspace'
+          && isValidUserPreference(incoming())
+          && incoming().uid == userId
+          && incoming().updatedAt == request.time
+          && (isOwner(userId) || isAdmin())
+          && existsAfter(/databases/$(database)/documents/users/$(userId));
+        allow update: if isVerifiedSignedIn()
+          && isValidId(userId)
+          && isValidId(prefId)
+          && prefId == 'workspace'
+          && isValidUserPreference(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/users/$(userId)).data.uid == userId
+          && (
+            (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['defaultLandingPage', 'compactTables', 'preferredPaymentMethod', 'savedNote', 'updatedAt'])) ||
+            (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['defaultLandingPage', 'compactTables', 'preferredPaymentMethod', 'savedNote', 'updatedAt']))
+          );
+        allow delete: if isVerifiedSignedIn() && isValidId(userId) && isValidId(prefId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // 5. Courses
+    match /courses/{courseId} {
+      allow get: if isVerifiedSignedIn() && isValidId(courseId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerifiedSignedIn()
+        && isValidId(courseId)
+        && isValidCourse(incoming())
+        && incoming().courseId == courseId
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isVerifiedSignedIn()
+        && isValidId(courseId)
+        && isValidCourse(incoming())
+        && incoming().courseId == existing().courseId
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'code', 'name', 'category', 'durationValue', 'durationUnit',
+          'registrationFee', 'defaultFee', 'status', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedSignedIn() && isValidId(courseId) && isAdmin();
+    }
+
+    // 6. Students (PII protected)
+    match /students/{studentId} {
+      allow get: if isVerifiedSignedIn() && isValidId(studentId) && (existing().ownerUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.ownerUid == request.auth.uid);
+      allow create: if isVerifiedSignedIn()
+        && isValidId(studentId)
+        && isValidStudent(incoming())
+        && incoming().studentId == studentId
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && isAdmin();
+      allow update: if isVerifiedSignedIn()
+        && isValidId(studentId)
+        && isValidStudent(incoming())
+        && incoming().studentId == existing().studentId
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'fullName', 'phone', 'email', 'courseName', 'status',
+          'totalCourseFee', 'totalPaid', 'balance', 'updatedAt'
+        ]);
+      allow delete: if isVerifiedSignedIn() && isValidId(studentId) && isAdmin();
+    }
+
+    // 7. Registration Applications (Terminal State Locked)
+    match /registration_applications/{applicationId} {
+      allow get: if isVerifiedSignedIn() && isValidId(applicationId) && (existing().submittedByUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.submittedByUid == request.auth.uid);
+      allow create: if isVerifiedSignedIn()
+        && isValidId(applicationId)
+        && isValidRegistrationApplication(incoming())
+        && incoming().applicationId == applicationId
+        && incoming().submittedByUid == request.auth.uid
+        && incoming().status == 'PENDING_ADMIN_APPROVAL'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedSignedIn()
+        && isValidId(applicationId)
+        && isValidRegistrationApplication(incoming())
+        && incoming().applicationId == existing().applicationId
+        && incoming().submittedByUid == existing().submittedByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewComment', 'updatedAt']) ||
+          (
+            existing().submittedByUid == request.auth.uid
+            && !(existing().status in ['APPROVED', 'REJECTED'])
+            && incoming().status == 'PENDING_ADMIN_APPROVAL'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['studentName', 'phone', 'courseName', 'paymentPlan', 'status', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedSignedIn() && isValidId(applicationId) && isAdmin();
+    }
+
+    // 8. Payment Submissions (Terminal State Locked)
+    match /payment_submissions/{submissionId} {
+      allow get: if isVerifiedSignedIn() && isValidId(submissionId) && (existing().submittedByUid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedSignedIn() && (isBootstrappedAdmin() || resource.data.submittedByUid == request.auth.uid);
+      allow create: if isVerifiedSignedIn()
+        && isValidId(submissionId)
+        && isValidPaymentSubmission(incoming())
+        && incoming().submissionId == submissionId
+        && incoming().submittedByUid == request.auth.uid
+        && incoming().status == 'PENDING'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedSignedIn()
+        && isValidId(submissionId)
+        && isValidPaymentSubmission(incoming())
+        && incoming().submissionId == existing().submissionId
+        && incoming().submittedByUid == existing().submittedByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewComment', 'updatedAt']) ||
+          (
+            existing().submittedByUid == request.auth.uid
+            && !(existing().status in ['APPROVED', 'REJECTED'])
+            && incoming().status == 'PENDING'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'paymentMethod', 'referenceNo', 'updatedAt'])
+          )
+        );
+      allow delete: if isVerifiedSignedIn() && isValidId(submissionId) && isAdmin();
+    }
+
+    // 9. Notifications
+    match /notifications/{notificationId} {
+      allow get: if isVerifiedSignedIn() && isValidId(notificationId) && (
+        existing().targetUid == request.auth.uid ||
+        existing().ownerUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.targetUid == request.auth.uid ||
+        resource.data.ownerUid == request.auth.uid
+      );
+      allow create: if isVerifiedSignedIn()
+        && isValidId(notificationId)
+        && isValidNotification(incoming())
+        && incoming().notificationId == notificationId
+        && incoming().ownerUid == request.auth.uid
+        && incoming().isRead == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedSignedIn()
+        && isValidId(notificationId)
+        && isValidNotification(incoming())
+        && incoming().notificationId == existing().notificationId
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().targetUid == existing().targetUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (existing().targetUid == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'updatedAt'])) ||
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'title', 'message', 'updatedAt']))
+        );
+      allow delete: if isVerifiedSignedIn() && isValidId(notificationId) && isAdmin();
+    }
+
+    // 10. Audit Logs (Append-only, immutable)
+    match /audit_logs/{logId} {
+      allow get: if isVerifiedSignedIn() && isValidId(logId) && isAdmin();
+      allow list: if isVerifiedSignedIn() && isBootstrappedAdmin();
+      allow create: if isVerifiedSignedIn()
+        && isValidId(logId)
+        && isValidAuditLog(incoming())
+        && incoming().logId == logId
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+  }
+}

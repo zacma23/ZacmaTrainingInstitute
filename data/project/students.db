@@ -1,0 +1,4 @@
+{"$$indexCreated":{"fieldName":"rollNumber","unique":true,"sparse":false}}
+{"id":"29ceb906-dda9-44d9-8bde-354b9c0ac663","name":"Rravulakari Ajay","rollNumber":"23UEAE0044","course":"B.Tech CSE","semester":"6","feeAmount":42000,"dueDate":"2026-03-03","paymentMethod":"Cash","createdAt":"2026-03-03T18:12:52.652Z","_id":"WrqCRfxxVzw2IvIa"}
+{"id":"bd9e76ed-83ac-44b9-abeb-d81195bedc81","name":"R.Veerabhadra","rollNumber":"23UEDC0053","course":"B.Tech CSE","semester":"6","feeAmount":98750,"dueDate":"2026-12-15","paymentMethod":"UPI","createdAt":"2026-03-05T04:23:19.140Z","_id":"27Y9iaTFLsOemTEo"}
+{"id":"913bfd2b-34fe-4d31-99a5-e0672b70e2dd","name":"D.Vivek","rollNumber":"23UEDC0014","course":"B.Tech CSE","semester":"6","feeAmount":111000,"dueDate":"2026-06-12","paymentMethod":"UPI","createdAt":"2026-03-05T04:53:05.917Z","_id":"Yjk967gqKpwQptq4"}

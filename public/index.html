@@ -1,0 +1,2554 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BirrLedger — Student Fee Management System</title>
+    <meta name="description" content="Production Role-Based Student Registration, Fee Payment, Installment Scheduling, Attendance, Receipting & Reporting System for Ethiopian Short-Term Training Institutes." />
+    <meta property="og:title" content="BirrLedger — Student Fee Management System" />
+    <meta property="og:description" content="Production Role-Based Student Registration, Fee Payment, Installment Scheduling, Attendance, Receipting & Reporting System for Ethiopian Short-Term Training Institutes." />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- Authentication Screen -->
+    <div id="authScreen" class="auth-screen">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <div class="logo-box">
+            <img src="/assets/images/institute_logo.jpg" alt="Institute Logo" class="brand-logo-img" referrerpolicy="no-referrer" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div class="brand-logo-fallback" style="display:none;">
+              <i data-lucide="landmark"></i>
+            </div>
+          </div>
+          <div>
+            <h1 id="authInstituteName">Addis Skills &amp; Technology Institute</h1>
+            <p class="auth-subtitle">Student Fee Management &amp; Accounting Portal</p>
+          </div>
+        </div>
+
+        <!-- Standard Login Form -->
+        <form id="loginForm" class="auth-form">
+          <div class="form-group">
+            <label for="loginUsername">Username</label>
+            <input type="text" id="loginUsername" autocomplete="username" placeholder="Enter your username" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Enter your password" required />
+          </div>
+          <div id="loginError" class="inline-error" style="display:none;"></div>
+          <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-block">
+            <i data-lucide="log-in"></i>
+            <span>Sign In</span>
+          </button>
+          <div class="auth-divider"><span>or</span></div>
+          <button type="button" id="googleLoginBtn" class="btn btn-secondary btn-block google-signin-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.26-.96 2.33-2.04 3.04l3.3 2.56c1.92-1.77 3.04-4.38 3.04-7.48 0-.72-.06-1.41-.19-2.08H12z"/>
+              <path fill="#34A853" d="M12 22c2.75 0 5.06-.91 6.75-2.46l-3.3-2.56c-.91.61-2.08.97-3.45.97-2.65 0-4.9-1.79-5.7-4.2l-3.41 2.63C4.57 19.72 8.01 22 12 22z"/>
+              <path fill="#4A90E2" d="M6.3 13.75c-.2-.61-.32-1.26-.32-1.93s.12-1.32.32-1.93L2.89 7.26C2.19 8.65 1.8 10.21 1.8 11.82s.39 3.17 1.09 4.56l3.41-2.63z"/>
+              <path fill="#FBBC05" d="M12 5.69c1.5 0 2.84.52 3.9 1.53l2.92-2.92C17.05 2.65 14.74 1.64 12 1.64 8.01 1.64 4.57 3.92 2.89 7.26l3.41 2.63c.8-2.41 3.05-4.2 5.7-4.2z"/>
+            </svg>
+            <span>Sign in with Google</span>
+          </button>
+          <p class="auth-meta">Currency: ETB &middot; Timezone: Africa/Addis_Ababa</p>
+        </form>
+
+        <!-- First-Time Setup Form (Shown only when 0 users exist in MySQL) -->
+        <form id="setupAdminForm" class="auth-form" style="display:none;">
+          <div class="setup-notice">
+            No administrator account found in MySQL. Create your primary Administrator account to initialize the system.
+          </div>
+          <div class="form-group">
+            <label for="setupFullName">Administrator Full Name</label>
+            <input type="text" id="setupFullName" placeholder="e.g., Abebaw Tadesse" required />
+          </div>
+          <div class="form-group">
+            <label for="setupUsername">Username</label>
+            <input type="text" id="setupUsername" placeholder="e.g., admin" required />
+          </div>
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="setupEmail">Email (Optional)</label>
+              <input type="email" id="setupEmail" placeholder="admin@institute.edu.et" />
+            </div>
+            <div class="form-group">
+              <label for="setupPhone">Phone</label>
+              <input type="text" id="setupPhone" placeholder="+251911000001" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="setupPassword">Password (min 8 characters)</label>
+            <input type="password" id="setupPassword" minlength="8" placeholder="Strong password" required />
+          </div>
+          <div id="setupError" class="inline-error" style="display:none;"></div>
+          <button type="submit" class="btn btn-primary btn-block">
+            <i data-lucide="shield-check"></i>
+            <span>Create Administrator &amp; Enter</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Main Authenticated Workspace -->
+    <div id="appShell" class="app-shell" style="display:none;">
+      <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+      <!-- Sidebar Navigation -->
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-logo-wrap">
+            <img src="/assets/images/institute_logo.jpg" alt="Institute Logo" class="sidebar-logo-img" referrerpolicy="no-referrer" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+            <div class="sidebar-logo-fallback" style="display:none;"><i data-lucide="landmark"></i></div>
+          </div>
+          <div class="sidebar-brand-text">
+            <div id="sidebarBrandTitle" class="brand-title">BirrLedger</div>
+            <div id="sidebarBrandSub" class="brand-sub">ASTI Ethiopia</div>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav" id="sidebarNav">
+          <!-- ADMIN NAVIGATION -->
+          <div id="adminNavGroup" class="role-nav-group admin-only">
+            <div class="role-nav-label">Administrator Portal</div>
+            <button type="button" class="nav-item active" data-page="dashboard">
+              <i data-lucide="layout-dashboard"></i>
+              <span>Dashboard</span>
+            </button>
+            <button type="button" class="nav-item" data-page="students">
+              <i data-lucide="users"></i>
+              <span>Students</span>
+            </button>
+            <button type="button" class="nav-item" data-page="registration-approvals">
+              <i data-lucide="user-check"></i>
+              <span>Registration Approvals</span>
+              <span id="navPendingRegCount" class="nav-counter" style="display:none;">0</span>
+            </button>
+            <button type="button" class="nav-item" data-page="courses">
+              <i data-lucide="book-open"></i>
+              <span>Courses</span>
+            </button>
+            <button type="button" class="nav-item" data-page="fees">
+              <i data-lucide="calculator"></i>
+              <span>Fee Management</span>
+            </button>
+            <button type="button" class="nav-item" data-page="payment-approvals">
+              <i data-lucide="badge-check"></i>
+              <span>Payment Approvals</span>
+              <span id="navPendingPayCount" class="nav-counter" style="display:none;">0</span>
+            </button>
+            <button type="button" class="nav-item" data-page="record-payment">
+              <i data-lucide="credit-card"></i>
+              <span>Record Payment</span>
+            </button>
+            <button type="button" class="nav-item" data-page="transactions">
+              <i data-lucide="arrow-left-right"></i>
+              <span>Transactions</span>
+            </button>
+            <button type="button" class="nav-item" data-page="receipts">
+              <i data-lucide="receipt"></i>
+              <span>Receipts</span>
+            </button>
+            <button type="button" class="nav-item" data-page="installments">
+              <i data-lucide="calendar-clock"></i>
+              <span>Installments</span>
+            </button>
+            <button type="button" class="nav-item" data-page="attendance">
+              <i data-lucide="clipboard-check"></i>
+              <span>Attendance</span>
+            </button>
+            <button type="button" class="nav-item" data-page="reports">
+              <i data-lucide="file-spreadsheet"></i>
+              <span>Reports</span>
+            </button>
+            <button type="button" class="nav-item" data-page="notifications">
+              <i data-lucide="bell"></i>
+              <span>Notifications</span>
+              <span id="navUnreadCount" class="nav-counter" style="display:none;">0</span>
+            </button>
+            <button type="button" class="nav-item" data-page="users">
+              <i data-lucide="shield"></i>
+              <span>Accountant Management</span>
+            </button>
+            <button type="button" class="nav-item" data-page="audit-logs">
+              <i data-lucide="history"></i>
+              <span>Audit Logs</span>
+            </button>
+            <button type="button" class="nav-item" data-page="settings">
+              <i data-lucide="settings"></i>
+              <span>Settings</span>
+            </button>
+            <button type="button" class="nav-item" data-page="assistant">
+              <i data-lucide="message-square-text"></i>
+              <span>Fee Assistant</span>
+            </button>
+          </div>
+
+          <!-- ACCOUNTANT NAVIGATION -->
+          <div id="accountantNavGroup" class="role-nav-group accountant-only" style="display:none;">
+            <div class="role-nav-label">Accountant Portal</div>
+            <button type="button" class="nav-item" data-page="acc-dashboard">
+              <i data-lucide="layout-dashboard"></i>
+              <span>Dashboard</span>
+            </button>
+            <button type="button" class="nav-item" data-page="acc-register">
+              <i data-lucide="user-plus"></i>
+              <span>Register Student</span>
+            </button>
+            <button type="button" class="nav-item" data-page="acc-students">
+              <i data-lucide="search"></i>
+              <span>Student Search</span>
+            </button>
+            <button type="button" class="nav-item" data-page="acc-submit-payment">
+              <i data-lucide="credit-card"></i>
+              <span>Payment Submission</span>
+            </button>
+            <button type="button" class="nav-item" data-page="acc-registrations">
+              <i data-lucide="clipboard-list"></i>
+              <span>Registration History</span>
+            </button>
+            <button type="button" class="nav-item" data-page="acc-payments">
+              <i data-lucide="wallet"></i>
+              <span>Payment History</span>
+            </button>
+            <button type="button" class="nav-item" data-page="notifications">
+              <i data-lucide="bell"></i>
+              <span>Notifications</span>
+              <span id="accNavUnreadCount" class="nav-counter" style="display:none;">0</span>
+            </button>
+            <button type="button" class="nav-item" data-page="acc-profile">
+              <i data-lucide="user-cog"></i>
+              <span>My Profile</span>
+            </button>
+            <button type="button" class="nav-item" data-page="assistant">
+              <i data-lucide="message-square-text"></i>
+              <span>Fee Assistant</span>
+            </button>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="user-summary">
+            <div class="user-name" id="currentUserFullName">—</div>
+            <div class="user-role-line">
+              <span id="currentUserRole">—</span>
+              <span aria-hidden="true">&middot;</span>
+              <span id="eatClock" class="mono">00:00 EAT</span>
+            </div>
+          </div>
+          <button type="button" id="logoutBtn" class="btn btn-ghost btn-sm btn-block">
+            <i data-lucide="log-out"></i>
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Viewport -->
+      <div class="main-wrap">
+        <!-- Strict 3-Zone Top Bar -->
+        <header class="topbar">
+          <div class="topbar-left">
+            <button type="button" id="mobileMenuBtn" class="icon-btn mobile-only" aria-label="Open navigation">
+              <i data-lucide="menu"></i>
+            </button>
+            <div class="breadcrumb-title" id="topbarPageTitle">Dashboard</div>
+          </div>
+          <div class="topbar-meta" id="topbarContextMeta">
+            <span id="topbarDateLabel">—</span>
+            <span aria-hidden="true">&middot;</span>
+            <span>ETB Currency</span>
+          </div>
+          <div class="topbar-actions">
+            <button type="button" id="quickStudentLookupBtn" class="btn btn-secondary btn-sm">
+              <i data-lucide="search"></i>
+              <span>Search Student / ID</span>
+            </button>
+            <button type="button" id="quickRecordPaymentBtn" class="btn btn-primary btn-sm admin-only">
+              <i data-lucide="plus"></i>
+              <span>Record Payment</span>
+            </button>
+            <button type="button" id="quickAccountantPayBtn" class="btn btn-primary btn-sm accountant-only" style="display:none;">
+              <i data-lucide="plus"></i>
+              <span>Submit Payment</span>
+            </button>
+          </div>
+        </header>
+
+        <main class="viewport">
+          <div id="firestoreErrorBanner" class="inline-error" style="display:none; margin-bottom:16px;"></div>
+          <!-- ==================== ADMIN PAGES ==================== -->
+
+          <!-- 1. ADMIN DASHBOARD -->
+          <section id="page-dashboard" class="page active">
+            <div class="page-head">
+              <div>
+                <h2>Administrator Financial &amp; Operations Overview</h2>
+                <p>Verified revenue, student enrollments, pending approval queues, and attendance metrics from MySQL.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="refreshDashboardBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="kpi-grid-12" id="dashboardKpiGrid"></div>
+
+            <div class="charts-grid">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Monthly Fee Collection (ETB)</h3>
+                  <span class="panel-meta">Verified payments (last 6 months)</span>
+                </div>
+                <div class="chart-box">
+                  <canvas id="monthlyCollectionChart"></canvas>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Payment Status Distribution</h3>
+                  <span class="panel-meta">Active enrollments</span>
+                </div>
+                <div class="chart-box">
+                  <canvas id="paymentStatusChart"></canvas>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Course-Wise Student Distribution</h3>
+                  <span class="panel-meta">Enrolled trainees</span>
+                </div>
+                <div class="chart-box">
+                  <canvas id="courseDistributionChart"></canvas>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Outstanding Payments by Student</h3>
+                  <span class="panel-meta">Highest priority balances</span>
+                </div>
+                <div class="table-scroll compact-table">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th>Course</th>
+                        <th class="num">Balance (ETB)</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dashOutstandingBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="split-2col" style="margin-bottom:20px;">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Recent Student Registration Applications</h3>
+                  <button type="button" class="btn btn-link btn-sm" onclick="navigateTo('registration-approvals')">Approval Queue</button>
+                </div>
+                <div class="table-scroll compact-table">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>App No</th>
+                        <th>Applicant</th>
+                        <th>Course</th>
+                        <th>Submitted By</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dashRecentRegsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Rejected / Correction-Required Applications</h3>
+                  <button type="button" class="btn btn-link btn-sm" onclick="navigateTo('registration-approvals', { status: 'REJECTED' })">Review All</button>
+                </div>
+                <div class="table-scroll compact-table">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>App No</th>
+                        <th>Applicant</th>
+                        <th>Reason / Comment</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dashRejectedRegsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Recent Verified Transactions</h3>
+                <button type="button" class="btn btn-link btn-sm" onclick="navigateTo('transactions')">View All Transactions</button>
+              </div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Txn ID</th>
+                      <th>Receipt</th>
+                      <th>Student</th>
+                      <th>Course</th>
+                      <th class="num">Amount</th>
+                      <th>Date</th>
+                      <th>Method</th>
+                      <th>Received By</th>
+                      <th>Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dashRecentTxnsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. STUDENTS (Admin Full Management) -->
+          <section id="page-students" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Student Directory &amp; Enrollments</h2>
+                <p>Manage approved trainee profiles, course assignments, payment plans, and graduation/suspension statuses.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="openNewStudentBtn" class="btn btn-primary btn-sm admin-only">
+                  <i data-lucide="user-plus"></i>
+                  <span>Register Student (Direct)</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="user"></i>
+                <input type="text" id="studentSearchInput" placeholder="Search by Student Name or Phone..." />
+              </div>
+              <div class="search-wrap">
+                <i data-lucide="hash"></i>
+                <input type="text" id="studentIdSearchInput" placeholder="Search by Student ID (e.g., ASTI-2026-0001)..." />
+              </div>
+              <select id="studentCourseFilter">
+                <option value="">All Courses</option>
+              </select>
+              <select id="studentPaymentFilter">
+                <option value="">All Payment Statuses</option>
+                <option value="Paid">Fully Paid</option>
+                <option value="Partially Paid">Partially Paid</option>
+                <option value="Unpaid">Unpaid</option>
+                <option value="Overdue">Overdue</option>
+              </select>
+              <select id="studentStatusFilter">
+                <option value="">Active &amp; Non-Archived</option>
+                <option value="Active">Active</option>
+                <option value="Graduated">Graduated</option>
+                <option value="Suspended">Suspended</option>
+                <option value="Archived">Archived</option>
+              </select>
+              <button type="button" id="adminStudentClearSearchBtn" class="btn btn-secondary btn-sm">Clear</button>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Student ID</th>
+                      <th>Full Name</th>
+                      <th>Phone</th>
+                      <th>Course</th>
+                      <th>Plan</th>
+                      <th class="num">Total Fee</th>
+                      <th class="num">Paid</th>
+                      <th class="num">Balance</th>
+                      <th>Next Due</th>
+                      <th>Payment Status</th>
+                      <th>Student Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="studentsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. STUDENT REGISTRATION APPROVAL CENTER (Admin Only) -->
+          <section id="page-registration-approvals" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Student Registration Approval Center</h2>
+                <p>Inspect accountant-submitted registration applications, verify documents &amp; fees, and approve, request correction, or reject.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="refreshRegApprovalsBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Refresh Queue</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="tab-bar" id="regApprovalTabs">
+              <button type="button" class="tab-btn active" data-status="PENDING_ADMIN_APPROVAL">Pending Approval</button>
+              <button type="button" class="tab-btn" data-status="CORRECTION_REQUIRED">Correction Required</button>
+              <button type="button" class="tab-btn" data-status="APPROVED">Approved</button>
+              <button type="button" class="tab-btn" data-status="REJECTED">Rejected</button>
+              <button type="button" class="tab-btn" data-status="">All</button>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="regAppSearchInput" placeholder="Search by App No, applicant name, phone, or submission ref..." />
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>App No</th>
+                      <th>Applicant</th>
+                      <th>Phone</th>
+                      <th>Course &amp; Plan</th>
+                      <th class="num">Official Tuition</th>
+                      <th class="num">Initial Submitted</th>
+                      <th>Submitted By</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="regApprovalsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. COURSES (Admin Management) -->
+          <section id="page-courses" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Short-Term Training Courses</h2>
+                <p>Configure vocational programs, registration fees, tuition fees (ETB), capacity, dates, and installment plans.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="openNewCourseBtn" class="btn btn-primary btn-sm admin-only">
+                  <i data-lucide="plus"></i>
+                  <span>Add Course</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Course Name &amp; Category</th>
+                      <th>Duration</th>
+                      <th class="num">Reg Fee</th>
+                      <th class="num">Tuition Fee</th>
+                      <th>Available Plans</th>
+                      <th class="num">Enrolled / Cap</th>
+                      <th>Status</th>
+                      <th class="admin-only">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="coursesTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 5. FEE MANAGEMENT (Admin) -->
+          <section id="page-fees" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Advanced Fee &amp; Installment Management</h2>
+                <p>Review student fee balances, month-by-month expected vs. paid breakdowns, and adjust installment schedules.</p>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="feeSearchInput" placeholder="Filter by student name or ID..." />
+              </div>
+              <select id="feeStatusFilter">
+                <option value="">All Balances</option>
+                <option value="Overdue">Overdue Only</option>
+                <option value="Partially Paid">Partially Paid</option>
+                <option value="Unpaid">Unpaid</option>
+                <option value="Paid">Fully Paid</option>
+              </select>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Student ID</th>
+                      <th>Student Name</th>
+                      <th>Course</th>
+                      <th>Payment Plan</th>
+                      <th class="num">Total Fee</th>
+                      <th class="num">Total Paid</th>
+                      <th class="num">Remaining</th>
+                      <th>Next Due Date</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="feeLedgerBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 6. PAYMENT APPROVAL CENTER (Admin Only) -->
+          <section id="page-payment-approvals" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Payment Submissions Approval Center</h2>
+                <p>Verify accountant-collected payments. Official receipts and balances update strictly after Administrator approval.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="refreshPayApprovalsBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Refresh Queue</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="tab-bar" id="payApprovalTabs">
+              <button type="button" class="tab-btn active" data-status="PENDING">Pending Approval</button>
+              <button type="button" class="tab-btn" data-status="APPROVED">Approved</button>
+              <button type="button" class="tab-btn" data-status="REJECTED">Rejected</button>
+              <button type="button" class="tab-btn" data-status="">All</button>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="payAppSearchInput" placeholder="Search submission ref, student name, ID, or reference..." />
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Submission Ref</th>
+                      <th>Student</th>
+                      <th>Course</th>
+                      <th class="num">Amount</th>
+                      <th>Date</th>
+                      <th>Method &amp; Ref</th>
+                      <th>Submitted By</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payApprovalsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 7. RECORD PAYMENT (Admin Direct Entry) -->
+          <section id="page-record-payment" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Record Direct Fee Payment (Administrator)</h2>
+                <p>Process student fee payments directly, update installment schedules, and issue official ETB receipts.</p>
+              </div>
+            </div>
+
+            <div class="split-2col">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Payment Entry Form</h3>
+                </div>
+                <form id="recordPaymentForm" class="form-stack">
+                  <div class="form-group">
+                    <label for="payStudentQuickSearch">Quick Search by Student Name or ID</label>
+                    <input type="text" id="payStudentQuickSearch" placeholder="Type student name or ID (e.g., ASTI-2026-0001)..." />
+                  </div>
+                  <div class="form-group">
+                    <label for="payStudentSelect">Select Student *</label>
+                    <select id="payStudentSelect" required>
+                      <option value="">Choose a student...</option>
+                    </select>
+                  </div>
+
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="payAmountInput">Current Payment Amount (ETB) *</label>
+                      <input type="number" id="payAmountInput" step="0.01" min="0.01" placeholder="0.00" required />
+                    </div>
+                    <div class="form-group">
+                      <label for="payDateInput">Payment Date *</label>
+                      <input type="date" id="payDateInput" required />
+                    </div>
+                  </div>
+
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="payMethodSelect">Payment Method *</label>
+                      <select id="payMethodSelect" required>
+                        <option value="Cash">Cash</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="Mobile Money">Mobile Money (Telebirr / M-Pesa)</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="payReferenceInput">Transaction Reference / Slip No</label>
+                      <input type="text" id="payReferenceInput" placeholder="e.g., TELEBIRR-8821 / CBE Ref" />
+                    </div>
+                  </div>
+
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="payReceivedByInput">Received By *</label>
+                      <input type="text" id="payReceivedByInput" required />
+                    </div>
+                    <div class="form-group">
+                      <label for="payNotesInput">Notes (Optional)</label>
+                      <input type="text" id="payNotesInput" placeholder="e.g., Month 2 installment" />
+                    </div>
+                  </div>
+
+                  <div id="adminAdjustmentBox" class="adjustment-box admin-only" style="display:none;">
+                    <label class="checkbox-row">
+                      <input type="checkbox" id="payIsAdjustmentCheck" />
+                      <span>Authorized Over-Balance Fee Adjustment (Admin Only)</span>
+                    </label>
+                    <input type="text" id="payAdjustmentReason" placeholder="Required reason for exceeding remaining balance..." style="display:none; margin-top:8px;" />
+                  </div>
+
+                  <div id="payFormError" class="inline-error" style="display:none;"></div>
+
+                  <div class="form-actions">
+                    <button type="button" id="resetPayFormBtn" class="btn btn-secondary">Clear</button>
+                    <button type="submit" id="submitPaymentBtn" class="btn btn-primary">
+                      <i data-lucide="check-circle"></i>
+                      <span>Record Payment &amp; Generate Receipt</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Live Student Balance &amp; Installments</h3>
+                </div>
+                <div id="payPreviewEmpty" class="empty-state-box">
+                  Select a student on the left to preview their course fee, previously paid total, remaining balance, and month-by-month installment schedule.
+                </div>
+                <div id="payPreviewContent" style="display:none;">
+                  <div class="kv-grid">
+                    <div class="kv-item">
+                      <span>Student ID</span>
+                      <strong id="pvStudentCode" class="mono">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Course</span>
+                      <strong id="pvCourseName">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Total Course Fee</span>
+                      <strong id="pvTotalFee" class="mono">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Previously Paid</span>
+                      <strong id="pvAlreadyPaid" class="mono txt-paid">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Current Balance</span>
+                      <strong id="pvRemaining" class="mono txt-overdue">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Balance After Payment</span>
+                      <strong id="pvAfterBalance" class="mono">—</strong>
+                    </div>
+                  </div>
+                  <h4 class="subtable-title">Installment Schedule</h4>
+                  <div class="table-scroll compact-table">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th>Installment</th>
+                          <th>Due Date</th>
+                          <th class="num">Expected</th>
+                          <th class="num">Paid</th>
+                          <th class="num">Remaining</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody id="pvInstallmentsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 8. TRANSACTIONS (Admin Only) -->
+          <section id="page-transactions" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Payment Transactions Ledger</h2>
+                <p>Immutable chronological record of all verified, administrator-approved payments and official receipts.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="exportTxnsCsvBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="download"></i>
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="txnSearchInput" placeholder="Search Txn ID, Receipt No, student, reference..." />
+              </div>
+              <select id="txnStudentFilter">
+                <option value="">All Students</option>
+              </select>
+              <select id="txnMethodFilter">
+                <option value="">All Methods</option>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Mobile Money">Mobile Money</option>
+                <option value="Other">Other</option>
+              </select>
+              <input type="date" id="txnStartDate" title="From Date" />
+              <input type="date" id="txnEndDate" title="To Date" />
+              <button type="button" id="txnClearFiltersBtn" class="btn btn-secondary btn-sm">Reset</button>
+            </div>
+
+            <div class="summary-strip">
+              <span>Matching Transactions: <strong id="txnSummaryCount" class="mono">0</strong></span>
+              <span aria-hidden="true">&middot;</span>
+              <span>Total Collected: <strong id="txnSummaryTotal" class="mono txt-paid">0.00 ETB</strong></span>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Txn ID</th>
+                      <th>Receipt No</th>
+                      <th>Student</th>
+                      <th>Course</th>
+                      <th class="num">Amount (ETB)</th>
+                      <th>Date</th>
+                      <th>Method</th>
+                      <th>Reference</th>
+                      <th>Received By</th>
+                      <th>Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody id="transactionsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 9. OFFICIAL RECEIPTS DIRECTORY (Admin Only) -->
+          <section id="page-receipts" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Official Payment Receipts Directory</h2>
+                <p>Sequential official receipts generated exclusively after Administrator verification and approval.</p>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="rcpSearchInput" placeholder="Search receipt number, Txn ID, student name, or Student ID..." />
+              </div>
+              <input type="date" id="rcpStartDate" title="From Date" />
+              <input type="date" id="rcpEndDate" title="To Date" />
+              <button type="button" id="rcpResetBtn" class="btn btn-secondary btn-sm">Reset</button>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Receipt No</th>
+                      <th>Txn ID</th>
+                      <th>Student</th>
+                      <th>Course</th>
+                      <th class="num">Amount Paid</th>
+                      <th class="num">Remaining Bal</th>
+                      <th>Payment Date</th>
+                      <th>Method</th>
+                      <th>Issued By</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="receiptsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 10. INSTALLMENTS (Admin Only) -->
+          <section id="page-installments" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Global Installments Schedule</h2>
+                <p>Track upcoming, due today, due within 3 days, and overdue installment milestones across all trainees.</p>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="instSearchInput" placeholder="Search student name, ID, or phone..." />
+              </div>
+              <select id="instStatusFilter">
+                <option value="">All Installments</option>
+                <option value="Overdue">Overdue</option>
+                <option value="Due Today">Due Today</option>
+                <option value="Due Soon">Due Within 3 Days</option>
+                <option value="Unpaid">All Unpaid</option>
+                <option value="Paid">Paid</option>
+              </select>
+              <select id="instCourseFilter">
+                <option value="">All Courses</option>
+              </select>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Phone</th>
+                      <th>Course</th>
+                      <th>Installment</th>
+                      <th>Due Date</th>
+                      <th class="num">Expected</th>
+                      <th class="num">Paid</th>
+                      <th class="num">Remaining</th>
+                      <th>Overdue</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="installmentsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 11. ATTENDANCE MANAGEMENT (Admin Only) -->
+          <section id="page-attendance" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Student Attendance Management</h2>
+                <p>Record and edit daily class attendance by course and batch, with audit-logged modifications and attendance percentages.</p>
+              </div>
+            </div>
+
+            <div class="tab-bar" id="attendanceTabs">
+              <button type="button" class="tab-btn active" data-tab="mark">Mark Daily Attendance</button>
+              <button type="button" class="tab-btn" data-tab="report">Attendance Summary &amp; History</button>
+            </div>
+
+            <!-- Attendance Tab 1: Mark -->
+            <div id="attMarkPane">
+              <div class="toolbar">
+                <select id="attCourseSelect" style="min-width:220px;"></select>
+                <input type="text" id="attBatchInput" value="Batch A" placeholder="Batch (e.g., Batch A)" style="width:140px;" />
+                <input type="date" id="attDateInput" />
+                <button type="button" id="attLoadBtn" class="btn btn-secondary btn-sm">Load Roster</button>
+                <div style="margin-left:auto; display:flex; gap:8px;">
+                  <button type="button" id="attMarkAllPresentBtn" class="btn btn-secondary btn-sm">Mark All Present</button>
+                  <button type="button" id="attSaveBtn" class="btn btn-primary btn-sm">
+                    <i data-lucide="save"></i>
+                    <span>Save Attendance</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="table-scroll">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Student ID</th>
+                        <th>Full Name</th>
+                        <th>Course</th>
+                        <th>Batch</th>
+                        <th>Current Mark</th>
+                        <th>Attendance Status</th>
+                        <th>Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody id="attRosterBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Attendance Tab 2: Summary & History -->
+            <div id="attReportPane" style="display:none;">
+              <div class="toolbar">
+                <select id="attRepCourseSelect">
+                  <option value="">All Courses</option>
+                </select>
+                <input type="month" id="attRepMonthInput" />
+                <button type="button" id="attRepLoadBtn" class="btn btn-primary btn-sm">Filter Report</button>
+                <button type="button" id="attRepExportCsvBtn" class="btn btn-secondary btn-sm">Export CSV</button>
+              </div>
+
+              <div class="panel" style="margin-bottom:18px;">
+                <div class="panel-header">
+                  <h3>Student Attendance Percentages</h3>
+                </div>
+                <div class="table-scroll">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Student ID</th>
+                        <th>Full Name</th>
+                        <th>Course</th>
+                        <th class="num">Total Days</th>
+                        <th class="num">Present</th>
+                        <th class="num">Late</th>
+                        <th class="num">Excused</th>
+                        <th class="num">Absent</th>
+                        <th class="num">Attendance %</th>
+                      </tr>
+                    </thead>
+                    <tbody id="attSummaryBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Detailed Attendance Log (Recent 200)</h3>
+                </div>
+                <div class="table-scroll">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Student</th>
+                        <th>Course</th>
+                        <th>Status</th>
+                        <th>Notes / Edit Reason</th>
+                        <th>Recorded By</th>
+                      </tr>
+                    </thead>
+                    <tbody id="attHistoryBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 12. NOTIFICATIONS (Role Scoped) -->
+          <section id="page-notifications" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Workflow &amp; Payment Notifications</h2>
+                <p>Role-scoped approval updates, submission alerts, and scheduled installment reminders.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="runReminderCheckBtn" class="btn btn-secondary btn-sm admin-only">
+                  <i data-lucide="radar"></i>
+                  <span>Run Check Now</span>
+                </button>
+                <button type="button" id="markAllReadBtn" class="btn btn-primary btn-sm">
+                  <i data-lucide="check-check"></i>
+                  <span>Mark All Read</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="gatewayStatusBanner" class="notice-banner"></div>
+
+            <div class="toolbar">
+              <select id="notifReadFilter">
+                <option value="all">All Notifications</option>
+                <option value="unread">Unread Only</option>
+                <option value="read">Read History</option>
+              </select>
+              <select id="notifTypeFilter">
+                <option value="">All Notification Types</option>
+                <option value="NEW_REGISTRATION">New Registration</option>
+                <option value="NEW_PAYMENT_SUBMISSION">New Payment Submission</option>
+                <option value="REGISTRATION_APPROVED">Registration Approved</option>
+                <option value="REGISTRATION_REJECTED">Registration Rejected</option>
+                <option value="CORRECTION_REQUIRED">Correction Required</option>
+                <option value="PAYMENT_APPROVED">Payment Approved</option>
+                <option value="PAYMENT_REJECTED">Payment Rejected</option>
+                <option value="OVERDUE">Installment Overdue</option>
+                <option value="DUE_TODAY">Due Today</option>
+                <option value="DUE_SOON">Due Within 3 Days</option>
+              </select>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Alert Type</th>
+                      <th>Details &amp; Student</th>
+                      <th>Course</th>
+                      <th class="num">Amount</th>
+                      <th>Date</th>
+                      <th>Channel</th>
+                      <th>State</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="notificationsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 13. REPORTS (Admin Only) -->
+          <section id="page-reports" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Financial &amp; Operational Reports</h2>
+                <p>Generate real-time MySQL collection, balance, overdue, course revenue, and attendance reports with CSV and Excel exports.</p>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <select id="reportTypeSelect">
+                <option value="daily">Daily Collection Report</option>
+                <option value="weekly">Weekly Collection Report</option>
+                <option value="monthly">Monthly Collection Report</option>
+                <option value="annual">Annual Collection Report</option>
+                <option value="outstanding">Outstanding Balance Report</option>
+                <option value="overdue">Overdue Student Report</option>
+                <option value="course-revenue">Course-Wise Revenue Report</option>
+                <option value="student-history">Student Payment History Report</option>
+                <option value="payment-methods">Payment Method Report</option>
+                <option value="attendance">Attendance Report</option>
+              </select>
+              <input type="date" id="reportDateInput" />
+              <input type="month" id="reportMonthInput" style="display:none;" />
+              <input type="number" id="reportYearInput" min="2020" max="2040" style="display:none; width:110px;" />
+              <select id="reportStudentSelect" style="display:none;">
+                <option value="">All Students</option>
+              </select>
+              <select id="reportCourseSelect" style="display:none;">
+                <option value="">All Courses</option>
+              </select>
+              <button type="button" id="generateReportBtn" class="btn btn-primary btn-sm">
+                <i data-lucide="play"></i>
+                <span>Generate</span>
+              </button>
+              <button type="button" id="downloadReportCsvBtn" class="btn btn-secondary btn-sm">
+                <i data-lucide="file-text"></i>
+                <span>CSV</span>
+              </button>
+              <button type="button" id="downloadReportXlsxBtn" class="btn btn-secondary btn-sm">
+                <i data-lucide="file-spreadsheet"></i>
+                <span>Excel (.xlsx)</span>
+              </button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3 id="reportPreviewTitle">Daily Collection Report</h3>
+                <span id="reportPreviewSummary" class="mono panel-meta">—</span>
+              </div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead id="reportTableHead"></thead>
+                  <tbody id="reportTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 14. ACCOUNTANT & USER MANAGEMENT (Admin Only) -->
+          <section id="page-users" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Accountant &amp; Staff Account Management</h2>
+                <p>Create, activate/deactivate, and reset passwords for Accountant and Administrator staff accounts.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="openNewUserBtn" class="btn btn-primary btn-sm">
+                  <i data-lucide="user-plus"></i>
+                  <span>Add Staff User</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h3>Staff Accounts</h3>
+              </div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Username</th>
+                      <th>Full Name</th>
+                      <th>Role</th>
+                      <th>Phone</th>
+                      <th>Email</th>
+                      <th>Status</th>
+                      <th>Last Login</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="usersTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 15. AUDIT LOGS (Admin Only) -->
+          <section id="page-audit-logs" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Financial &amp; Security Audit Logs</h2>
+                <p>Immutable log of all registrations, payment submissions, approvals, rejections, attendance edits, and access events.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="refreshAuditBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Refresh Logs</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="auditSearchInput" placeholder="Search username, action, entity, or reason..." />
+              </div>
+              <select id="auditRoleFilter">
+                <option value="">All Roles</option>
+                <option value="admin">Administrator</option>
+                <option value="accountant">Accountant</option>
+              </select>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>User</th>
+                      <th>Role</th>
+                      <th>Action</th>
+                      <th>Entity</th>
+                      <th>Previous / New</th>
+                      <th>Reason / Details</th>
+                    </tr>
+                  </thead>
+                  <tbody id="auditLogsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 16. SETTINGS (Admin Only) -->
+          <section id="page-settings" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Institute Settings &amp; Localization</h2>
+                <p>Configure institute branding for receipts, Ethiopian localization, reminder rules, and database status.</p>
+              </div>
+            </div>
+
+            <div class="split-2col">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Institute Profile &amp; Receipt Details</h3>
+                </div>
+                <form id="settingsForm" class="form-stack">
+                  <div class="form-group">
+                    <label for="setInstituteName">Institute Full Name</label>
+                    <input type="text" id="setInstituteName" required />
+                  </div>
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="setInstituteShort">Short Code / Acronym</label>
+                      <input type="text" id="setInstituteShort" required />
+                    </div>
+                    <div class="form-group">
+                      <label for="setInstitutePhone">Official Phone</label>
+                      <input type="text" id="setInstitutePhone" required />
+                    </div>
+                  </div>
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="setInstituteEmail">Official Email</label>
+                      <input type="email" id="setInstituteEmail" />
+                    </div>
+                    <div class="form-group">
+                      <label for="setReminderDays">Reminder Lead Days (Due Soon)</label>
+                      <input type="number" id="setReminderDays" min="1" max="30" required />
+                    </div>
+                  </div>
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="setRegion">Region</label>
+                      <select id="setRegion"></select>
+                    </div>
+                    <div class="form-group">
+                      <label for="setCity">City</label>
+                      <input type="text" id="setCity" />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="setAddress">Street / Sub-City / Woreda Address</label>
+                    <input type="text" id="setAddress" />
+                  </div>
+                  <div class="form-group">
+                    <label for="setReceiptFooter">Receipt Footer Note</label>
+                    <textarea id="setReceiptFooter" rows="2"></textarea>
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>System Environment &amp; Messaging Gateways</h3>
+                </div>
+                <div id="settingsSystemInfo" class="form-stack"></div>
+              </div>
+            </div>
+
+            <div class="split-2col" style="margin-top:16px;">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Personal Cloud Workspace Preferences</h3>
+                </div>
+                <form id="adminWorkspacePrefsForm" class="form-stack">
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="adminPrefPaymentMethod">Default Payment Method</label>
+                      <select id="adminPrefPaymentMethod">
+                        <option value="Mobile Money">Mobile Money (Telebirr / M-Pesa)</option>
+                        <option value="Bank Transfer">Bank Transfer (CBE / Awash)</option>
+                        <option value="Cash">Cash</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="adminPrefCompact">Table Density</label>
+                      <select id="adminPrefCompact">
+                        <option value="false">Standard Density</option>
+                        <option value="true">Compact Ledger Rows</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="adminPrefNote">Saved Personal Shift / Follow-up Note</label>
+                    <textarea id="adminPrefNote" rows="2" maxlength="500" placeholder="Saved privately to your cloud profile..."></textarea>
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-secondary">Save Cloud Preferences</button>
+                  </div>
+                </form>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Cloud Synced Activity</h3>
+                </div>
+                <div id="adminCloudSyncList" class="form-stack">
+                  <div class="empty-state-box">Sign in with Google to view real-time synced workspace state.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ==================== ACCOUNTANT PAGES ==================== -->
+
+          <!-- A1. ACCOUNTANT DASHBOARD -->
+          <section id="page-acc-dashboard" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Accountant Intake &amp; Submissions Workspace</h2>
+                <p>Register prospective trainees and submit collected payments for Administrator verification and official receipting.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" id="refreshAccDashBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Refresh</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="quick-actions-grid">
+              <button type="button" class="quick-action-btn" onclick="navigateTo('acc-register')">
+                <i data-lucide="user-plus"></i>
+                <span>Register New Student</span>
+              </button>
+              <button type="button" class="quick-action-btn" onclick="navigateTo('acc-submit-payment')">
+                <i data-lucide="credit-card"></i>
+                <span>Submit Payment</span>
+              </button>
+              <button type="button" class="quick-action-btn" onclick="navigateTo('acc-students')">
+                <i data-lucide="search"></i>
+                <span>Search Student</span>
+              </button>
+              <button type="button" class="quick-action-btn" onclick="navigateTo('acc-registrations')">
+                <i data-lucide="clipboard-list"></i>
+                <span>Pending Applications</span>
+              </button>
+              <button type="button" class="quick-action-btn" onclick="navigateTo('acc-payments')">
+                <i data-lucide="wallet"></i>
+                <span>Payment History</span>
+              </button>
+            </div>
+
+            <div class="kpi-grid-12" id="accDashboardKpiGrid"></div>
+
+            <div class="split-2col">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>My Recent Student Registrations</h3>
+                  <button type="button" class="btn btn-link btn-sm" onclick="navigateTo('acc-registrations')">View All</button>
+                </div>
+                <div class="table-scroll compact-table">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>App No</th>
+                        <th>Student</th>
+                        <th>Course</th>
+                        <th class="num">Initial</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="accDashRegsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>My Recent Payment Submissions</h3>
+                  <button type="button" class="btn btn-link btn-sm" onclick="navigateTo('acc-payments')">View All</button>
+                </div>
+                <div class="table-scroll compact-table">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Ref</th>
+                        <th>Student</th>
+                        <th class="num">Amount</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="accDashPaysBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- A2. ACCOUNTANT REGISTER STUDENT (Intake -> PENDING_ADMIN_APPROVAL) -->
+          <section id="page-acc-register" class="page">
+            <div class="page-head">
+              <div>
+                <h2 id="accRegisterPageTitle">Register New Student Application</h2>
+                <p>Submitted applications enter <strong>Pending Admin Approval</strong>. Official tuition and registration fees are strictly enforced by the system catalog.</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <form id="accRegisterForm" class="form-stack">
+                <input type="hidden" id="accRegEditAppId" />
+                <div id="accResubmitNotice" class="notice-banner" style="display:none; background:#fffbeb; border-color:#f59e0b; color:#92400e;"></div>
+
+                <h4 style="font-size:14px; color:var(--text-primary);">1. Student Personal &amp; Contact Information</h4>
+                <div class="form-row-3">
+                  <div class="form-group">
+                    <label for="accStFullName">Full Name *</label>
+                    <input type="text" id="accStFullName" placeholder="e.g., Dawit Bekele" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="accStGender">Gender (Optional)</label>
+                    <select id="accStGender">
+                      <option value="">Prefer not to say</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="accStEmail">Email (Optional)</label>
+                    <input type="email" id="accStEmail" placeholder="student@example.et" />
+                  </div>
+                </div>
+
+                <div class="form-row-3">
+                  <div class="form-group">
+                    <label for="accStPhone">Phone Number (ET) *</label>
+                    <input type="text" id="accStPhone" placeholder="0911223344 or +251911223344" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="accStAltPhone">Alternative Phone</label>
+                    <input type="text" id="accStAltPhone" placeholder="Optional backup phone" />
+                  </div>
+                  <div class="form-group">
+                    <label for="accStAddress">Sub-City / Woreda / Address</label>
+                    <input type="text" id="accStAddress" placeholder="e.g., Bole, Woreda 03" />
+                  </div>
+                </div>
+
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="accStRegion">Region *</label>
+                    <select id="accStRegion"></select>
+                  </div>
+                  <div class="form-group">
+                    <label for="accStCity">City / Town *</label>
+                    <input type="text" id="accStCity" value="Addis Ababa" required />
+                  </div>
+                </div>
+
+                <div class="form-divider"></div>
+                <h4 style="font-size:14px; color:var(--text-primary);">2. Emergency Contact &amp; Documents</h4>
+                <div class="form-row-3">
+                  <div class="form-group">
+                    <label for="accEmgName">Emergency Contact Name</label>
+                    <input type="text" id="accEmgName" placeholder="Parent / Guardian full name" />
+                  </div>
+                  <div class="form-group">
+                    <label for="accEmgPhone">Emergency Contact Phone</label>
+                    <input type="text" id="accEmgPhone" placeholder="09..." />
+                  </div>
+                  <div class="form-group">
+                    <label for="accEmgRelation">Relationship</label>
+                    <input type="text" id="accEmgRelation" placeholder="e.g., Mother, Brother, Spouse" />
+                  </div>
+                </div>
+
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="accDocsNote">Document Notes (ID / Transcript / Photo)</label>
+                    <input type="text" id="accDocsNote" placeholder="e.g., Kebele ID copy + 2 passport photos verified" />
+                  </div>
+                  <div class="form-group">
+                    <label for="accDocsFiles">Attach Supporting Documents (Max 3 files: PDF/JPG/PNG, 1.5MB each)</label>
+                    <input type="file" id="accDocsFiles" multiple accept=".pdf,image/jpeg,image/png,image/webp" />
+                  </div>
+                </div>
+                <div id="accDocsChipList" class="doc-chip-list"></div>
+
+                <div class="form-divider"></div>
+                <h4 style="font-size:14px; color:var(--text-primary);">3. Course Selection &amp; Official Fee Schedule (Read-Only Official Fees)</h4>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label for="accCourseId">Select Training Course *</label>
+                    <select id="accCourseId" required></select>
+                  </div>
+                  <div class="form-group">
+                    <label for="accPlanCode">Payment Plan *</label>
+                    <select id="accPlanCode" required>
+                      <option value="full">Full Payment</option>
+                      <option value="2_months">2-Month Installment</option>
+                      <option value="3_months">3-Month Installment</option>
+                      <option value="6_months">6-Month Installment</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="readonly-fee-box">
+                  <div class="kv-item">
+                    <span>Official Registration Fee (System Enforced)</span>
+                    <strong id="accRoRegFee" class="mono">0.00 ETB</strong>
+                  </div>
+                  <div class="kv-item">
+                    <span>Official Course Tuition Fee (System Enforced)</span>
+                    <strong id="accRoCourseFee" class="mono">0.00 ETB</strong>
+                  </div>
+                  <div class="kv-item">
+                    <span>Course Duration</span>
+                    <strong id="accRoDuration" class="mono">—</strong>
+                  </div>
+                </div>
+
+                <div class="form-row-3">
+                  <div class="form-group">
+                    <label for="accRegDate">Registration Date *</label>
+                    <input type="date" id="accRegDate" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="accStartDate">Preferred Start Date *</label>
+                    <input type="date" id="accStartDate" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="accDueDate">First Tuition Due Date *</label>
+                    <input type="date" id="accDueDate" required />
+                  </div>
+                </div>
+
+                <div class="form-divider"></div>
+                <h4 style="font-size:14px; color:var(--text-primary);">4. Initial Payment Collected at Registration (Optional)</h4>
+                <div class="form-row-4">
+                  <div class="form-group">
+                    <label for="accInitRegPaid">Registration Fee Collected (ETB)</label>
+                    <input type="number" id="accInitRegPaid" step="0.01" min="0" value="0" />
+                  </div>
+                  <div class="form-group">
+                    <label for="accInitCoursePaid">Initial Tuition Collected (ETB)</label>
+                    <input type="number" id="accInitCoursePaid" step="0.01" min="0" value="0" />
+                  </div>
+                  <div class="form-group">
+                    <label for="accPayMethod">Payment Method</label>
+                    <select id="accPayMethod">
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Mobile Money">Mobile Money (Telebirr / M-Pesa)</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="accPayRef">Reference / Slip No</label>
+                    <input type="text" id="accPayRef" placeholder="e.g., TELEBIRR-1094" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="accSubNotes">Application / Payment Notes</label>
+                  <input type="text" id="accSubNotes" placeholder="Optional remarks for Administrator review" />
+                </div>
+
+                <div id="accRegError" class="inline-error" style="display:none;"></div>
+
+                <div class="form-actions">
+                  <button type="button" id="accRegResetBtn" class="btn btn-secondary">Clear / Cancel Edit</button>
+                  <button type="submit" id="accRegSubmitBtn" class="btn btn-primary">
+                    <i data-lucide="send"></i>
+                    <span>Submit Registration for Admin Approval</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <!-- A3. ACCOUNTANT STUDENT SEARCH (Read-Only Balances & Payment Status) -->
+          <section id="page-acc-students" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Student Search &amp; Fee Balances</h2>
+                <p>Look up approved students to verify remaining fee balances and submit new payments.</p>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="user"></i>
+                <input type="text" id="accStudentSearchInput" placeholder="Search by Student Name or Phone..." />
+              </div>
+              <div class="search-wrap">
+                <i data-lucide="hash"></i>
+                <input type="text" id="accStudentIdSearchInput" placeholder="Search by Student ID (e.g., ASTI-2026-0001)..." />
+              </div>
+              <select id="accStudentCourseFilter">
+                <option value="">All Courses</option>
+              </select>
+              <select id="accStudentPaymentFilter">
+                <option value="">All Payment Statuses</option>
+                <option value="Paid">Fully Paid</option>
+                <option value="Partially Paid">Partially Paid</option>
+                <option value="Unpaid">Unpaid</option>
+                <option value="Overdue">Overdue</option>
+              </select>
+              <button type="button" id="accStudentClearSearchBtn" class="btn btn-secondary btn-sm">Clear</button>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Student ID</th>
+                      <th>Full Name</th>
+                      <th>Phone</th>
+                      <th>Course</th>
+                      <th class="num">Total Fee</th>
+                      <th class="num">Verified Paid</th>
+                      <th class="num">Remaining Balance</th>
+                      <th>Payment Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accStudentsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- A4. ACCOUNTANT PAYMENT SUBMISSION -->
+          <section id="page-acc-submit-payment" class="page">
+            <div class="page-head">
+              <div>
+                <h2>Submit Student Payment for Approval</h2>
+                <p>Record partial or full student fee payments. Submissions remain <strong>Pending</strong> until verified and approved by an Administrator.</p>
+              </div>
+            </div>
+
+            <div class="split-2col">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Payment Submission Form</h3>
+                </div>
+                <form id="accPaySubmitForm" class="form-stack">
+                  <div class="form-group">
+                    <label for="accPayStudentQuickSearch">Quick Search by Student Name or ID</label>
+                    <input type="text" id="accPayStudentQuickSearch" placeholder="Type student name or ID (e.g., ASTI-2026-0001)..." />
+                  </div>
+                  <div class="form-group">
+                    <label for="accPayStudentSelect">Select Approved Student *</label>
+                    <select id="accPayStudentSelect" required>
+                      <option value="">Choose a student...</option>
+                    </select>
+                  </div>
+
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="accPayAmountInput">Payment Amount Collected (ETB) *</label>
+                      <input type="number" id="accPayAmountInput" step="0.01" min="0.01" placeholder="0.00" required />
+                    </div>
+                    <div class="form-group">
+                      <label for="accPayDateInput">Payment Date *</label>
+                      <input type="date" id="accPayDateInput" required />
+                    </div>
+                  </div>
+
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="accPayMethodSelect">Payment Method *</label>
+                      <select id="accPayMethodSelect" required>
+                        <option value="Cash">Cash</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="Mobile Money">Mobile Money (Telebirr / M-Pesa)</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="accPayRefInput">Receipt / Slip / Bank Reference</label>
+                      <input type="text" id="accPayRefInput" placeholder="e.g., CBE-84210 / TELEBIRR-551" />
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="accPayNotesInput">Notes (Optional)</label>
+                    <input type="text" id="accPayNotesInput" placeholder="e.g., Partial installment collected at front desk" />
+                  </div>
+
+                  <div id="accPayFormError" class="inline-error" style="display:none;"></div>
+
+                  <div class="form-actions">
+                    <button type="button" id="accPayResetBtn" class="btn btn-secondary">Clear</button>
+                    <button type="submit" class="btn btn-primary">
+                      <i data-lucide="send"></i>
+                      <span>Submit Payment for Admin Approval</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Student Official Balance Preview</h3>
+                </div>
+                <div id="accPayPreviewEmpty" class="empty-state-box">
+                  Select an approved student to view their official course fee, verified paid total, and remaining balance before submitting payment.
+                </div>
+                <div id="accPayPreviewContent" style="display:none;">
+                  <div class="kv-grid">
+                    <div class="kv-item">
+                      <span>Student ID</span>
+                      <strong id="accPvCode" class="mono">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Course</span>
+                      <strong id="accPvCourse">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Official Total Fee</span>
+                      <strong id="accPvTotal" class="mono">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Verified Paid</span>
+                      <strong id="accPvPaid" class="mono txt-paid">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Current Balance</span>
+                      <strong id="accPvBalance" class="mono txt-overdue">—</strong>
+                    </div>
+                    <div class="kv-item">
+                      <span>Projected After Approval</span>
+                      <strong id="accPvAfter" class="mono">—</strong>
+                    </div>
+                  </div>
+                  <h4 class="subtable-title">Installment Milestones</h4>
+                  <div class="table-scroll compact-table">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th>Installment</th>
+                          <th>Due Date</th>
+                          <th class="num">Expected</th>
+                          <th class="num">Remaining</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody id="accPvInstBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- A5. ACCOUNTANT REGISTRATION HISTORY -->
+          <section id="page-acc-registrations" class="page">
+            <div class="page-head">
+              <div>
+                <h2>My Submitted Student Registrations</h2>
+                <p>Track approval progress, read Administrator comments, print Submission Confirmations, or correct and resubmit returned applications.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" class="btn btn-primary btn-sm" onclick="navigateTo('acc-register')">
+                  <i data-lucide="user-plus"></i>
+                  <span>New Registration</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="accRegHistSearch" placeholder="Search by applicant name, App No, or phone..." />
+              </div>
+              <select id="accRegHistStatus">
+                <option value="">All Statuses</option>
+                <option value="PENDING_ADMIN_APPROVAL">Pending Approval</option>
+                <option value="CORRECTION_REQUIRED">Correction Required</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>App No</th>
+                      <th>Applicant</th>
+                      <th>Course</th>
+                      <th class="num">Initial Submitted</th>
+                      <th>Reg Date</th>
+                      <th>Status</th>
+                      <th>Admin Review Comment</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accRegHistBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- A6. ACCOUNTANT PAYMENT SUBMISSION HISTORY -->
+          <section id="page-acc-payments" class="page">
+            <div class="page-head">
+              <div>
+                <h2>My Payment Submissions History</h2>
+                <p>Review your pending, approved, and rejected payment submissions and download non-official Submission Confirmations.</p>
+              </div>
+              <div class="page-head-actions">
+                <button type="button" class="btn btn-primary btn-sm" onclick="navigateTo('acc-submit-payment')">
+                  <i data-lucide="plus"></i>
+                  <span>Submit Payment</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <div class="search-wrap">
+                <i data-lucide="search"></i>
+                <input type="text" id="accPayHistSearch" placeholder="Search submission ref, student name, or Student ID..." />
+              </div>
+              <select id="accPayHistStatus">
+                <option value="">All Statuses</option>
+                <option value="PENDING">Pending Approval</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            <div class="panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Submission Ref</th>
+                      <th>Student</th>
+                      <th>Course</th>
+                      <th class="num">Amount</th>
+                      <th>Date</th>
+                      <th>Method &amp; Ref</th>
+                      <th>Status</th>
+                      <th>Review / Official Receipt</th>
+                      <th>Confirmation</th>
+                    </tr>
+                  </thead>
+                  <tbody id="accPayHistBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- A7. ACCOUNTANT PROFILE -->
+          <section id="page-acc-profile" class="page">
+            <div class="page-head">
+              <div>
+                <h2>My Staff Profile &amp; Security</h2>
+                <p>View your assigned role details and update your account password.</p>
+              </div>
+            </div>
+
+            <div class="split-2col">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Account Details</h3>
+                </div>
+                <div class="form-stack" id="accProfileDetails"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Change Password</h3>
+                </div>
+                <form id="changePasswordForm" class="form-stack">
+                  <div class="form-group">
+                    <label for="cpCurrent">Current Password *</label>
+                    <input type="password" id="cpCurrent" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="cpNew">New Password (min 8 chars) *</label>
+                    <input type="password" id="cpNew" minlength="8" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="cpConfirm">Confirm New Password *</label>
+                    <input type="password" id="cpConfirm" minlength="8" required />
+                  </div>
+                  <div id="cpError" class="inline-error" style="display:none;"></div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Update Password</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="split-2col" style="margin-top:16px;">
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>My Cloud Workspace Preferences</h3>
+                </div>
+                <form id="accWorkspacePrefsForm" class="form-stack">
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="accPrefPaymentMethod">Default Payment Method</label>
+                      <select id="accPrefPaymentMethod">
+                        <option value="Mobile Money">Mobile Money (Telebirr / M-Pesa)</option>
+                        <option value="Bank Transfer">Bank Transfer (CBE / Awash)</option>
+                        <option value="Cash">Cash</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="accPrefCompact">Table Density</label>
+                      <select id="accPrefCompact">
+                        <option value="false">Standard Density</option>
+                        <option value="true">Compact Ledger Rows</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="accPrefNote">Saved Shift / Follow-up Note</label>
+                    <textarea id="accPrefNote" rows="2" maxlength="500" placeholder="Saved privately to your cloud profile..."></textarea>
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-secondary">Save Cloud Preferences</button>
+                  </div>
+                </form>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h3>Cloud Synced Submissions</h3>
+                </div>
+                <div id="accCloudSyncList" class="form-stack">
+                  <div class="empty-state-box">Sign in with Google to view real-time synced workspace state.</div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- SHARED: MULTI-TURN FEE ASSISTANT CHATBOT -->
+          <section id="page-assistant" class="page">
+            <div class="page-head">
+              <div>
+                <h2>BirrLedger Operations &amp; Fee Assistant</h2>
+                <p>Multi-turn assistant grounded in your active Ethiopian training institute courses, installment plans, and fee policies.</p>
+              </div>
+              <div class="page-head-actions">
+                <select id="chatRoleSelect" aria-label="Assistant role">
+                  <option value="fee_advisor">Fee &amp; Policy Advisor</option>
+                  <option value="reminder_drafter">Fast Reminder Drafter</option>
+                  <option value="audit_analyst">Operations &amp; Compliance Helper</option>
+                </select>
+                <button type="button" id="clearChatBtn" class="btn btn-secondary btn-sm">
+                  <i data-lucide="rotate-ccw"></i>
+                  <span>New Conversation</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="panel chat-panel">
+              <div id="chatThread" class="chat-thread"></div>
+
+              <div id="chatQuickPrompts" class="chat-quick-prompts">
+                <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Explain our installment plan options and registration fees across active courses.">
+                  Installment &amp; Fee Overview
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Draft a polite Telebirr payment reminder message in English and Amharic for an installment due in 3 days.">
+                  Draft Payment Reminder
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm chat-prompt-chip" data-prompt="Summarize the difference between Accountant submission confirmations and Administrator official receipts.">
+                  RBAC Receipt Policy
+                </button>
+              </div>
+
+              <div id="chatErrorBox" class="inline-error" style="display:none; margin:0 16px 8px;"></div>
+
+              <form id="chatComposerForm" class="chat-composer">
+                <textarea
+                  id="chatMessageInput"
+                  rows="2"
+                  maxlength="4000"
+                  placeholder="Ask about course fees, installment breakdowns, reminder templates, or approval workflows..."
+                  required
+                ></textarea>
+                <button type="submit" id="chatSendBtn" class="btn btn-primary">
+                  <i data-lucide="send"></i>
+                  <span>Send</span>
+                </button>
+              </form>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- MODAL: Admin Direct Register / Edit Student -->
+    <div id="studentModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3 id="studentModalTitle">Register New Student</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('studentModal')"><i data-lucide="x"></i></button>
+        </div>
+        <form id="studentForm" class="modal-body form-stack">
+          <input type="hidden" id="stId" />
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="stFullName">Full Name *</label>
+              <input type="text" id="stFullName" placeholder="e.g., Abebe Kebede" required />
+            </div>
+            <div class="form-group">
+              <label for="stGender">Gender (Optional)</label>
+              <select id="stGender">
+                <option value="">Prefer not to say</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="stStatus">Student Status *</label>
+              <select id="stStatus">
+                <option value="Active">Active</option>
+                <option value="Graduated">Graduated</option>
+                <option value="Suspended">Suspended</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="stPhone">Phone Number (ET) *</label>
+              <input type="text" id="stPhone" placeholder="0911223344 or +251911223344" required />
+            </div>
+            <div class="form-group">
+              <label for="stAltPhone">Alternative Phone</label>
+              <input type="text" id="stAltPhone" placeholder="Optional backup phone" />
+            </div>
+            <div class="form-group">
+              <label for="stEmail">Email (Optional)</label>
+              <input type="email" id="stEmail" placeholder="student@example.et" />
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="stRegion">Region *</label>
+              <select id="stRegion"></select>
+            </div>
+            <div class="form-group">
+              <label for="stCity">City / Town *</label>
+              <input type="text" id="stCity" value="Addis Ababa" required />
+            </div>
+            <div class="form-group">
+              <label for="stAddress">Sub-City / Woreda / Kebele</label>
+              <input type="text" id="stAddress" placeholder="e.g., Bole, Woreda 03" />
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="stEmgName">Emergency Contact Name</label>
+              <input type="text" id="stEmgName" />
+            </div>
+            <div class="form-group">
+              <label for="stEmgPhone">Emergency Phone</label>
+              <input type="text" id="stEmgPhone" />
+            </div>
+            <div class="form-group">
+              <label for="stBatchName">Batch</label>
+              <input type="text" id="stBatchName" value="Batch A" />
+            </div>
+          </div>
+
+          <div class="form-divider"></div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="stCourseId">Course Enrolled *</label>
+              <select id="stCourseId" required></select>
+            </div>
+            <div class="form-group">
+              <label for="stPlanCode">Payment Plan *</label>
+              <select id="stPlanCode" required>
+                <option value="full">Full Payment</option>
+                <option value="2_months">2-Month Installment</option>
+                <option value="3_months">3-Month Installment</option>
+                <option value="6_months">6-Month Installment</option>
+                <option value="custom">Custom Installment Plan</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="stTotalFee">Total Course Fee (ETB) *</label>
+              <input type="number" id="stTotalFee" step="0.01" min="1" required />
+            </div>
+          </div>
+
+          <div class="form-row-4">
+            <div class="form-group">
+              <label for="stRegDate">Registration Date</label>
+              <input type="date" id="stRegDate" required />
+            </div>
+            <div class="form-group">
+              <label for="stStartDate">Course Start Date</label>
+              <input type="date" id="stStartDate" required />
+            </div>
+            <div class="form-group">
+              <label for="stGradDate">Expected Graduation</label>
+              <input type="date" id="stGradDate" required />
+            </div>
+            <div class="form-group">
+              <label for="stDueDate">First Payment Due Date</label>
+              <input type="date" id="stDueDate" required />
+            </div>
+          </div>
+
+          <div id="customInstallmentBuilder" class="custom-builder" style="display:none;">
+            <div class="panel-header" style="padding:0 0 8px 0; border:none;">
+              <strong>Custom Installment Schedule (Must sum to Total Fee)</strong>
+              <button type="button" id="addCustomInstRowBtn" class="btn btn-secondary btn-sm">+ Add Row</button>
+            </div>
+            <div id="customInstRows"></div>
+          </div>
+
+          <div id="stRegenerateRow" class="checkbox-row" style="display:none;">
+            <input type="checkbox" id="stRegenerateSchedule" />
+            <label for="stRegenerateSchedule">Regenerate installment schedule from updated fee/plan/due date</label>
+          </div>
+
+          <div id="studentFormError" class="inline-error" style="display:none;"></div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('studentModal')">Cancel</button>
+            <button type="submit" id="studentSubmitBtn" class="btn btn-primary">Save Student</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Review Registration Application (Admin) -->
+    <div id="reviewApplicationModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3 id="reviewAppTitle">Review Registration Application</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('reviewApplicationModal')"><i data-lucide="x"></i></button>
+        </div>
+        <div id="reviewAppBody" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- MODAL: Student Complete Financial Profile -->
+    <div id="profileModal" class="modal-overlay">
+      <div class="modal modal-xl">
+        <div class="modal-header">
+          <h3 id="profileModalTitle">Student Financial Profile</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('profileModal')"><i data-lucide="x"></i></button>
+        </div>
+        <div id="profileModalBody" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- MODAL: Adjust Installments (Admin) -->
+    <div id="adjustInstallmentsModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3 id="adjustModalTitle">Adjust Installment Schedule</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('adjustInstallmentsModal')"><i data-lucide="x"></i></button>
+        </div>
+        <form id="adjustInstallmentsForm" class="modal-body form-stack">
+          <input type="hidden" id="adjEnrollmentId" />
+          <div class="summary-strip" id="adjSummaryStrip"></div>
+          <div id="adjRowsContainer" class="form-stack"></div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <button type="button" id="adjAddRowBtn" class="btn btn-secondary btn-sm">+ Add Installment</button>
+            <span id="adjRunningTotal" class="mono"></span>
+          </div>
+          <div class="form-group">
+            <label for="adjReasonInput">Adjustment Reason (Audit Log)</label>
+            <input type="text" id="adjReasonInput" placeholder="e.g., Approved extended payment arrangement" required />
+          </div>
+          <div id="adjError" class="inline-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('adjustInstallmentsModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Adjusted Schedule</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Course Add / Edit (Admin Only) -->
+    <div id="courseModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3 id="courseModalTitle">Add Course</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('courseModal')"><i data-lucide="x"></i></button>
+        </div>
+        <form id="courseForm" class="modal-body form-stack">
+          <input type="hidden" id="crsId" />
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="crsCode">Course Code *</label>
+              <input type="text" id="crsCode" placeholder="e.g., GD-101" required />
+            </div>
+            <div class="form-group">
+              <label for="crsCategory">Category *</label>
+              <input type="text" id="crsCategory" placeholder="e.g., Technology, Design, Trades" value="Technology" required />
+            </div>
+            <div class="form-group">
+              <label for="crsStatus">Status</label>
+              <select id="crsStatus">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="crsName">Course Name *</label>
+            <input type="text" id="crsName" placeholder="e.g., Graphic Design" required />
+          </div>
+          <div class="form-group">
+            <label for="crsDesc">Description</label>
+            <textarea id="crsDesc" rows="2"></textarea>
+          </div>
+          <div class="form-row-4">
+            <div class="form-group">
+              <label for="crsDurationVal">Duration *</label>
+              <input type="number" id="crsDurationVal" min="1" value="3" required />
+            </div>
+            <div class="form-group">
+              <label for="crsDurationUnit">Unit *</label>
+              <select id="crsDurationUnit">
+                <option value="months">Months</option>
+                <option value="weeks">Weeks</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="crsRegFee">Registration Fee (ETB) *</label>
+              <input type="number" id="crsRegFee" step="0.01" min="0" value="500" required />
+            </div>
+            <div class="form-group">
+              <label for="crsFee">Course Tuition Fee (ETB) *</label>
+              <input type="number" id="crsFee" step="0.01" min="1" required />
+            </div>
+          </div>
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="crsStartDate">Intake Start Date</label>
+              <input type="date" id="crsStartDate" />
+            </div>
+            <div class="form-group">
+              <label for="crsEndDate">Intake End Date</label>
+              <input type="date" id="crsEndDate" />
+            </div>
+            <div class="form-group">
+              <label for="crsCapacity">Max Student Capacity</label>
+              <input type="number" id="crsCapacity" min="1" value="30" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Available Payment Plans</label>
+            <div class="checkbox-grid" id="crsPlansGroup">
+              <label class="checkbox-row"><input type="checkbox" value="full" checked /> Full Payment</label>
+              <label class="checkbox-row"><input type="checkbox" value="2_months" checked /> 2 Months</label>
+              <label class="checkbox-row"><input type="checkbox" value="3_months" checked /> 3 Months</label>
+              <label class="checkbox-row"><input type="checkbox" value="6_months" /> 6 Months</label>
+              <label class="checkbox-row"><input type="checkbox" value="custom" checked /> Custom</label>
+            </div>
+          </div>
+          <div id="courseFormError" class="inline-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('courseModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Course</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Official Printable / PDF Payment Receipt (Admin Only) -->
+    <div id="receiptModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header no-print">
+          <h3>Official Payment Receipt</h3>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button type="button" id="downloadReceiptPdfBtn" class="btn btn-secondary btn-sm">
+              <i data-lucide="file-down"></i>
+              <span>Download PDF</span>
+            </button>
+            <button type="button" id="printReceiptBtn" class="btn btn-primary btn-sm">
+              <i data-lucide="printer"></i>
+              <span>Print Receipt</span>
+            </button>
+            <button type="button" class="icon-btn" onclick="closeModal('receiptModal')"><i data-lucide="x"></i></button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div id="printableReceiptArea" class="receipt-sheet"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Non-Official Submission Confirmation (Accountant) -->
+    <div id="confirmationModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header no-print">
+          <h3>Submission Confirmation (Not Official Receipt)</h3>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button type="button" id="downloadConfirmationPdfBtn" class="btn btn-secondary btn-sm">
+              <i data-lucide="file-down"></i>
+              <span>Download Confirmation PDF</span>
+            </button>
+            <button type="button" id="printConfirmationBtn" class="btn btn-primary btn-sm">
+              <i data-lucide="printer"></i>
+              <span>Print Confirmation</span>
+            </button>
+            <button type="button" class="icon-btn" onclick="closeModal('confirmationModal')"><i data-lucide="x"></i></button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div id="printableConfirmationArea" class="receipt-sheet"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Add Staff User (Admin Only) -->
+    <div id="userModal" class="modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Create Staff Account</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('userModal')"><i data-lucide="x"></i></button>
+        </div>
+        <form id="userForm" class="modal-body form-stack">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="usrUsername">Username *</label>
+              <input type="text" id="usrUsername" required />
+            </div>
+            <div class="form-group">
+              <label for="usrRole">Role *</label>
+              <select id="usrRole">
+                <option value="accountant">Accountant</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="usrFullName">Full Name *</label>
+            <input type="text" id="usrFullName" required />
+          </div>
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="usrPhone">Phone</label>
+              <input type="text" id="usrPhone" placeholder="+2519..." />
+            </div>
+            <div class="form-group">
+              <label for="usrEmail">Email (Optional)</label>
+              <input type="email" id="usrEmail" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="usrPassword">Initial Password (min 8 chars) *</label>
+            <input type="password" id="usrPassword" minlength="8" required />
+          </div>
+          <div id="userFormError" class="inline-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create User</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL: Confirmation Dialog (Replaces native window.confirm) -->
+    <div id="confirmModal" class="modal-overlay">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <h3 id="confirmModalTitle">Confirm Action</h3>
+          <button type="button" class="icon-btn" onclick="resolveConfirmModal(false)"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmModalMessage" style="color:var(--text-secondary); line-height:1.6;"></p>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="resolveConfirmModal(false)">Cancel</button>
+            <button type="button" id="confirmModalOkBtn" class="btn btn-danger" onclick="resolveConfirmModal(true)">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Reason / Comment Dialog (Replaces native window.prompt) -->
+    <div id="reasonModal" class="modal-overlay">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <h3 id="reasonModalTitle">Provide Reason</h3>
+          <button type="button" class="icon-btn" onclick="resolveReasonModal(false)"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body form-stack">
+          <p id="reasonModalMessage" style="color:var(--text-secondary); margin:0;"></p>
+          <div class="form-group">
+            <label id="reasonModalLabel" for="reasonModalInput">Reason / Comment *</label>
+            <textarea id="reasonModalInput" rows="3" placeholder="Enter details..."></textarea>
+          </div>
+          <div id="reasonModalError" class="inline-error" style="display:none;"></div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="resolveReasonModal(false)">Cancel</button>
+            <button type="button" id="reasonModalOkBtn" class="btn btn-danger" onclick="resolveReasonModal(true)">Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Global Search by Student Name & Student ID (Admin & Accountant) -->
+    <div id="studentLookupModal" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>Search Student by Name or Student ID</h3>
+          <button type="button" class="icon-btn" onclick="closeModal('studentLookupModal')"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body form-stack">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="lookupStudentNameInput">Search by Student Name / Phone</label>
+              <input type="text" id="lookupStudentNameInput" placeholder="e.g., Abebe Kebede or 0911..." />
+            </div>
+            <div class="form-group">
+              <label for="lookupStudentIdInput">Search by Student ID</label>
+              <input type="text" id="lookupStudentIdInput" placeholder="e.g., ASTI-2026-0001" />
+            </div>
+          </div>
+          <div class="table-scroll" style="max-height:360px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Student ID</th>
+                  <th>Full Name</th>
+                  <th>Phone</th>
+                  <th>Course</th>
+                  <th class="num">Balance</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="lookupResultsBody">
+                <tr><td colspan="7" class="empty-state-box">Type a Student Name or Student ID above to search.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="/vendor/lucide.min.js"></script>
+    <script src="/vendor/chart.umd.min.js"></script>
+    <script src="/vendor/jspdf.umd.min.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/receipt.js"></script>
+    <script src="/js/firebase-bundle.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
