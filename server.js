@@ -48,16 +48,18 @@ app.use(
     frameguard: false,
   })
 );
-app.use(
-  compression({
-    filter: (req, res) => {
-      if (req.path === '/api/chat/stream' || req.headers.accept === 'text/event-stream') {
-        return false;
-      }
-      return compression.filter(req, res);
-    },
-  })
-);
+if (!process.env.VERCEL) {
+  app.use(
+    compression({
+      filter: (req, res) => {
+        if (req.path === '/api/chat/stream' || req.headers.accept === 'text/event-stream') {
+          return false;
+        }
+        return compression.filter(req, res);
+      },
+    })
+  );
+}
 app.use(cors());
 app.use(express.json({ limit: '8mb' }));
 

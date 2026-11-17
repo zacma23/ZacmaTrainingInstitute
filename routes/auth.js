@@ -212,8 +212,9 @@ router.post('/google', loginLimiter, async (req, res) => {
       `SELECT id, username, firebaseUid, fullName, email, phone, role, isActive
        FROM users
        WHERE firebaseUid = ? OR LOWER(email) = ?
+       ORDER BY (firebaseUid = ?) DESC
        LIMIT 1`,
-      [firebaseUid, emailLower]
+      [firebaseUid, emailLower, firebaseUid]
     );
 
     let user;
@@ -233,8 +234,8 @@ router.post('/google', loginLimiter, async (req, res) => {
       const roleId = roleRows.length > 0 ? roleRows[0].id : null;
 
       const userId = randomUUID();
-      const baseSlug = emailLower.split('@')[0].replace(/[^a-z0-9_.-]/g, '').slice(0, 48) || 'google_user';
-      const username = `${baseSlug}_${firebaseUid.slice(0, 6)}`.toLowerCase();
+      const baseSlug = emailLower.split('@')[0].replace(/[^a-z0-9_.-]/g, '').slice(0, 44) || 'google_user';
+      const username = `${baseSlug}_${firebaseUid.slice(0, 12)}`.toLowerCase();
       const placeholderHash = await bcrypt.hash(randomUUID(), 10);
 
       await pool.query(

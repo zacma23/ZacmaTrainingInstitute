@@ -442,10 +442,17 @@ document.getElementById('googleLoginBtn').addEventListener('click', async () => 
     showToast(`Signed in with Google as ${data.user.fullName}`, 'success');
   } catch (err) {
     let msg = err.message || 'Google Sign-In failed.';
-    if (err && (err.code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain'))) {
+    const code = (err && err.code) || '';
+    if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
       msg = `Domain "${window.location.hostname}" is not authorized for Google Sign-In. Add "${window.location.hostname}" in Firebase Console → Authentication → Settings → Authorized domains.`;
-    } else if (err && (err.code === 'auth/popup-blocked' || msg.includes('popup-blocked'))) {
+    } else if (code === 'auth/popup-blocked' || msg.includes('popup-blocked')) {
       msg = 'Google Sign-In popup was blocked by your browser. Please allow popups for this site and try again.';
+    } else if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      msg = 'Google Sign-In popup was closed before completing sign-in. Please click "Sign in with Google" and try again.';
+    } else if (code === 'auth/operation-not-allowed') {
+      msg = 'Google Sign-In is disabled in Firebase Authentication. Enable Google under Firebase Console → Authentication → Sign-in method.';
+    } else if (code === 'auth/network-request-failed') {
+      msg = 'Network error while contacting Google authentication. Please verify your internet connection and retry.';
     } else if (err && err.data && err.data.detail) {
       msg = `${msg} (${err.data.detail})`;
     }

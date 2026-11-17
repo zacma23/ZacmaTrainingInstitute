@@ -1,4 +1,11 @@
-const { app, ensureInitialized } = require('../server');
+let serverModule = null;
+let serverLoadError = null;
+try {
+  serverModule = require('../server');
+} catch (err) {
+  serverLoadError = err;
+  console.error('Failed to initialize Express server module:', err);
+}
 
 function sanitizeDbError(err) {
   const msg = String((err && err.message) || 'Unknown error');
@@ -30,7 +37,7 @@ function normalizeVercelUrl(req) {
   }
 }
 
-function dispatchExpress(req, res) {
+function dispatchExpress(app, req, res) {
   return new Promise((resolve, reject) => {
     if (res.writableEnded) {
       resolve();
@@ -77,6 +84,20 @@ function dispatchExpress(req, res) {
 module.exports = async (req, res) => {
   normalizeVercelUrl(req);
 
+  if (serverLoadError || !serverModule || !serverModule.app) {
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.end(
+      JSON.stringify({
+        error: 'Server module initialization failed.',
+        code: (serverLoadError && serverLoadError.code) || 'MODULE_LOAD_ERROR',
+        detail: sanitizeDbError(serverLoadError),
+      })
+    );
+  }
+
+  const { app, ensureInitialized } = serverModule;
+
   // If the serverless runtime already consumed the request stream into req.body,
   // prevent body-parser from hanging or failing while reading an ended stream.
   if (req.readableEnded && req._body === undefined && req.body !== undefined) {
@@ -101,7 +122,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    await dispatchExpress(req, res);
+    await dispatchExpress(app, req, res);
   } catch (err) {
     console.error('Vercel Express dispatch failed:', err);
     if (!res.headersSent && !res.writableEnded) {
