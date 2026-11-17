@@ -19,7 +19,7 @@ router.use(authenticate);
 
 const ALLOWED_DOC_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 const ALLOWED_AUDIO_MIMES = new Set(['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/aac']);
-const MAX_MEDIA_BYTES = 4.5 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 3.2 * 1024 * 1024;
 
 function validateUploadedFile(fileObj, allowedSet, label = 'File') {
   if (!fileObj || !fileObj.data) return null;
@@ -32,7 +32,7 @@ function validateUploadedFile(fileObj, allowedSet, label = 'File') {
   }
   const approxBytes = Math.floor((base64.length * 3) / 4);
   if (approxBytes > MAX_MEDIA_BYTES) {
-    const err = new Error(`${label} exceeds the 4.5 MB AI scan size limit.`);
+    const err = new Error(`${label} exceeds the 3.2 MB raw size limit (Vercel 4.5 MB request cap).`);
     err.status = 400;
     throw err;
   }

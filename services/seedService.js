@@ -141,68 +141,80 @@ const DEFAULT_COURSES = [
 async function ensureBaselineCatalog() {
   const pool = getPool();
 
-  // 0. Ensure roles table entries exist
+  // 0. Ensure roles table entries exist (single batch insert)
   const defaultRoles = [
-    { code: 'admin', name: 'Administrator', description: 'Full institute management, approvals, courses, attendance, and audit control' },
-    { code: 'accountant', name: 'Accountant', description: 'Student registration intake and payment submission for administrator approval' },
+    [randomUUID(), 'admin', 'Administrator', 'Full institute management, approvals, courses, attendance, and audit control'],
+    [randomUUID(), 'accountant', 'Accountant', 'Student registration intake and payment submission for administrator approval'],
   ];
-  for (const r of defaultRoles) {
-    await pool.query(
-      'INSERT IGNORE INTO roles (id, code, name, description) VALUES (?, ?, ?, ?)',
-      [randomUUID(), r.code, r.name, r.description]
-    );
-  }
+  await pool.query(
+    'INSERT IGNORE INTO roles (id, code, name, description) VALUES ?',
+    [defaultRoles]
+  );
   const [roleRows] = await pool.query('SELECT id, code FROM roles');
   const roleIdByCode = Object.fromEntries(roleRows.map((r) => [r.code, r.id]));
 
-  // 1. Ensure default settings & upgrade legacy default institute branding
-  for (const [key, val] of Object.entries(DEFAULT_SETTINGS)) {
+  // 1. Ensure default settings & upgrade legacy default institute branding (single batch insert)
+  const settingsRows = Object.entries(DEFAULT_SETTINGS).map(([key, val]) => [key, val, 'system']);
+  if (settingsRows.length > 0) {
     await pool.query(
-      'INSERT IGNORE INTO settings (settingKey, settingValue, updatedBy) VALUES (?, ?, ?)',
-      [key, val, 'system']
+      'INSERT IGNORE INTO settings (settingKey, settingValue, updatedBy) VALUES ?',
+      [settingsRows]
     );
   }
   await pool.query(
-    "UPDATE settings SET settingValue = 'Zacma Technology Institute' WHERE settingKey = 'instituteName' AND settingValue = 'Addis Skills & Technology Institute'"
-  );
-  await pool.query(
-    "UPDATE settings SET settingValue = 'ZTI Ethiopia' WHERE settingKey = 'instituteShortName' AND settingValue = 'ASTI Ethiopia'"
-  );
-  await pool.query(
-    "UPDATE settings SET settingValue = 'finance@zacmatech.edu.et' WHERE settingKey = 'instituteEmail' AND settingValue = 'finance@addisskills.edu.et'"
+    `UPDATE settings
+     SET settingValue = CASE
+       WHEN settingKey = 'instituteName' AND settingValue = 'Addis Skills & Technology Institute' THEN 'Zacma Technology Institute'
+       WHEN settingKey = 'instituteShortName' AND settingValue = 'ASTI Ethiopia' THEN 'ZTI Ethiopia'
+       WHEN settingKey = 'instituteEmail' AND settingValue = 'finance@addisskills.edu.et' THEN 'finance@zacmatech.edu.et'
+       ELSE settingValue
+     END
+     WHERE (settingKey = 'instituteName' AND settingValue = 'Addis Skills & Technology Institute')
+        OR (settingKey = 'instituteShortName' AND settingValue = 'ASTI Ethiopia')
+        OR (settingKey = 'instituteEmail' AND settingValue = 'finance@addisskills.edu.et')`
   );
 
-  // 2. Ensure default payment plans
-  for (const plan of DEFAULT_PAYMENT_PLANS) {
+  // 2. Ensure default payment plans (single batch insert)
+  const planRows = DEFAULT_PAYMENT_PLANS.map((plan) => [
+    randomUUID(),
+    plan.code,
+    plan.name,
+    plan.installmentCount,
+    plan.intervalDays,
+    plan.description,
+    1,
+  ]);
+  await pool.query(
+    'INSERT IGNORE INTO payment_plans (id, code, name, installmentCount, intervalDays, description, isActive) VALUES ?',
+    [planRows]
+  );
+
+  // 3. Ensure default courses exist (single check + batch insert for missing defaults)
+  const [existingCourses] = await pool.query('SELECT code, name FROM courses');
+  const existingCodes = new Set(existingCourses.map((c) => c.code));
+  const existingNames = new Set(existingCourses.map((c) => c.name));
+  const missingCourses = DEFAULT_COURSES.filter(
+    (c) => !existingCodes.has(c.code) && !existingNames.has(c.name)
+  ).map((c) => [
+    randomUUID(),
+    c.code,
+    c.name,
+    c.category,
+    c.description,
+    c.durationValue,
+    c.durationUnit,
+    c.registrationFee,
+    c.defaultFee,
+    JSON.stringify(c.availablePlans),
+    c.maxCapacity,
+    'Active',
+  ]);
+  if (missingCourses.length > 0) {
     await pool.query(
-      `INSERT IGNORE INTO payment_plans (id, code, name, installmentCount, intervalDays, description, isActive)
-       VALUES (?, ?, ?, ?, ?, ?, 1)`,
-      [randomUUID(), plan.code, plan.name, plan.installmentCount, plan.intervalDays, plan.description]
+      `INSERT INTO courses (id, code, name, category, description, durationValue, durationUnit, registrationFee, defaultFee, availablePlans, maxCapacity, status)
+       VALUES ?`,
+      [missingCourses]
     );
-  }
-
-  // 3. Ensure default courses exist (add missing defaults idempotently by code)
-  for (const c of DEFAULT_COURSES) {
-    const [existing] = await pool.query('SELECT id FROM courses WHERE code = ? OR name = ? LIMIT 1', [c.code, c.name]);
-    if (existing.length === 0) {
-      await pool.query(
-        `INSERT INTO courses (id, code, name, category, description, durationValue, durationUnit, registrationFee, defaultFee, availablePlans, maxCapacity, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
-        [
-          randomUUID(),
-          c.code,
-          c.name,
-          c.category,
-          c.description,
-          c.durationValue,
-          c.durationUnit,
-          c.registrationFee,
-          c.defaultFee,
-          JSON.stringify(c.availablePlans),
-          c.maxCapacity,
-        ]
-      );
-    }
   }
 
   // 4. Bootstrap initial admin ONLY if users table is empty AND env vars are explicitly provided

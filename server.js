@@ -8,7 +8,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
-const cron = require('node-cron');
 
 const logger = require('./config/logger');
 const { initDatabase, checkDbHealth } = require('./config/db');
@@ -49,7 +48,16 @@ app.use(
     frameguard: false,
   })
 );
-app.use(compression());
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.path === '/api/chat/stream' || req.headers.accept === 'text/event-stream') {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  })
+);
 app.use(cors());
 app.use(express.json({ limit: '8mb' }));
 
@@ -57,10 +65,14 @@ app.use(express.json({ limit: '8mb' }));
 app.get('/api/health', async (req, res) => {
   const db = await checkDbHealth();
   const jwtOk = isJwtConfigured();
+  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const geminiOk = Boolean(geminiKey && geminiKey !== 'MY_GEMINI_API_KEY');
   res.status(db.connected && jwtOk ? 200 : 503).json({
     status: db.connected && jwtOk ? 'ok' : 'degraded',
+    environment: process.env.VERCEL ? 'vercel' : 'node',
     timezone: process.env.TZ,
     jwtConfigured: jwtOk,
+    geminiConfigured: geminiOk,
     database: db,
   });
 });
@@ -159,6 +171,7 @@ async function bootstrap() {
 
     // Run automated payment reminder check every hour in Africa/Addis_Ababa timezone (non-serverless only)
     if (!process.env.VERCEL) {
+      const cron = require('node-cron');
       cron.schedule(
         '0 * * * *',
         () => {

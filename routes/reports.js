@@ -133,7 +133,7 @@ async function buildReportData(reportType, queryParams = {}) {
       FROM courses c
       LEFT JOIN enrollments e ON e.courseId = c.id AND e.enrollmentStatus != 'Archived'
       LEFT JOIN students s ON s.id = e.studentId
-      GROUP BY c.id
+      GROUP BY c.id, c.code, c.name, c.defaultFee
       ORDER BY expectedRevenue DESC
     `);
 

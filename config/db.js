@@ -5,9 +5,17 @@ const mysql = require('mysql2/promise');
 const logger = require('./logger');
 
 let pool = null;
+let lastInitError = null;
+
+function sanitizeErrorText(msg) {
+  return String(msg || '')
+    .replace(/(mysql|mariadb):\/\/[^@/\s]+@/gi, '$1://***:***@')
+    .replace(/(password|pwd)=([^&\s;]+)/gi, '$1=***');
+}
 
 function resolveSslOption(urlSslMode) {
-  const rawSsl = String(process.env.DB_SSL || urlSslMode || '').trim().toLowerCase();
+  const rawInput = String(process.env.DB_SSL || urlSslMode || '').trim();
+  const rawSsl = rawInput.toLowerCase();
   const rawCa = (process.env.DB_SSL_CA || '').trim();
 
   if (!rawSsl && !rawCa) {
@@ -16,10 +24,24 @@ function resolveSslOption(urlSslMode) {
   if (rawSsl === 'false' || rawSsl === '0' || rawSsl === 'disable' || rawSsl === 'disabled') {
     return undefined;
   }
+  if (rawInput.startsWith('{')) {
+    try {
+      const parsedSsl = JSON.parse(rawInput);
+      if (parsedSsl && typeof parsedSsl === 'object') {
+        return { minVersion: 'TLSv1.2', ...parsedSsl };
+      }
+    } catch {
+      // fall through to standard SSL option handling
+    }
+  }
 
   const sslObj = {
     minVersion: 'TLSv1.2',
-    rejectUnauthorized: rawSsl !== 'skip-verify' && rawSsl !== 'no-verify' && rawSsl !== 'allow-self-signed',
+    rejectUnauthorized:
+      rawSsl !== 'skip-verify' &&
+      rawSsl !== 'no-verify' &&
+      rawSsl !== 'allow-self-signed' &&
+      rawSsl !== 'insecure',
   };
 
   if (rawCa) {
@@ -216,23 +238,24 @@ async function initDatabase() {
     return pool;
   }
 
-  const cfg = getDbConfig();
-  const isLocalHost = cfg.host === '127.0.0.1' || cfg.host === 'localhost';
-  if ((process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) && isLocalHost) {
-    const err = new Error(
-      'No external MySQL database is configured for Vercel. Set DATABASE_URL (or DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_SSL) in Vercel Project Settings → Environment Variables.'
-    );
-    err.code = 'MISSING_VERCEL_DB_CONFIG';
-    throw err;
-  }
+  try {
+    const cfg = getDbConfig();
+    const isLocalHost = cfg.host === '127.0.0.1' || cfg.host === 'localhost';
+    if ((process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) && isLocalHost) {
+      const err = new Error(
+        'No external MySQL database is configured for Vercel. Set DATABASE_URL (or DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_SSL) in Vercel Project Settings → Environment Variables.'
+      );
+      err.code = 'MISSING_VERCEL_DB_CONFIG';
+      throw err;
+    }
 
-  if (!cfg.user) {
-    throw new Error('DB_USER (or DATABASE_URL) is not configured in environment variables.');
-  }
+    if (!cfg.user) {
+      throw new Error('DB_USER (or DATABASE_URL) is not configured in environment variables.');
+    }
 
-  ensureLocalMariaDbRunning(cfg.host);
+    ensureLocalMariaDbRunning(cfg.host);
 
-  const skipSchemaSync = String(process.env.DB_SKIP_SCHEMA_SYNC || '').toLowerCase() === 'true';
+    const skipSchemaSync = String(process.env.DB_SKIP_SCHEMA_SYNC || '').toLowerCase() === 'true';
 
   if (!skipSchemaSync) {
     const buildConnOpts = (withDatabase) => ({
@@ -336,8 +359,8 @@ async function initDatabase() {
     }
   }
 
-  // 2. Create connection pool bound to target database
-  pool = mysql.createPool({
+  const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const poolBaseConfig = {
     host: cfg.host,
     port: cfg.port,
     user: cfg.user,
@@ -345,6 +368,8 @@ async function initDatabase() {
     database: cfg.database,
     waitForConnections: true,
     connectionLimit: cfg.connectionLimit,
+    maxIdle: isServerless ? Math.min(2, cfg.connectionLimit) : cfg.connectionLimit,
+    idleTimeout: isServerless ? 25000 : 60000,
     queueLimit: 0,
     connectTimeout: 10000,
     enableKeepAlive: true,
@@ -352,6 +377,11 @@ async function initDatabase() {
     dateStrings: ['DATE'],
     decimalNumbers: true,
     timezone: '+03:00',
+  };
+
+  // 2. Create connection pool bound to target database
+  pool = mysql.createPool({
+    ...poolBaseConfig,
     ...(cfg.ssl ? { ssl: cfg.ssl } : {}),
   });
 
@@ -368,20 +398,7 @@ async function initDatabase() {
       await pool.end().catch(() => {});
       cfg.ssl = { minVersion: 'TLSv1.2', rejectUnauthorized: true };
       pool = mysql.createPool({
-        host: cfg.host,
-        port: cfg.port,
-        user: cfg.user,
-        password: cfg.password,
-        database: cfg.database,
-        waitForConnections: true,
-        connectionLimit: cfg.connectionLimit,
-        queueLimit: 0,
-        connectTimeout: 10000,
-        enableKeepAlive: true,
-        keepAliveInitialDelay: 10000,
-        dateStrings: ['DATE'],
-        decimalNumbers: true,
-        timezone: '+03:00',
+        ...poolBaseConfig,
         ssl: cfg.ssl,
       });
       const retryConn = await pool.getConnection();
@@ -397,7 +414,15 @@ async function initDatabase() {
     }
   }
 
-  return pool;
+    lastInitError = null;
+    return pool;
+  } catch (initErr) {
+    lastInitError = {
+      code: initErr?.code || 'DB_INIT_ERROR',
+      message: sanitizeErrorText(initErr?.message || 'Database initialization failed.'),
+    };
+    throw initErr;
+  }
 }
 
 function getPool() {
@@ -433,7 +458,11 @@ async function checkDbHealth() {
     const [[row]] = await currentPool.query('SELECT 1 AS ok, VERSION() AS version, DATABASE() AS dbName');
     return { connected: true, version: row.version, database: row.dbName };
   } catch (err) {
-    return { connected: false, error: err.message };
+    return {
+      connected: false,
+      code: lastInitError?.code || err?.code || 'DB_UNAVAILABLE',
+      error: lastInitError?.message || sanitizeErrorText(err?.message),
+    };
   }
 }
 

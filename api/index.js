@@ -2,7 +2,9 @@ const { app, ensureInitialized } = require('../server');
 
 function sanitizeDbError(err) {
   const msg = String((err && err.message) || 'Unknown database connection error');
-  return msg.replace(/mysql:\/\/[^@]+@/gi, 'mysql://***:***@');
+  return msg
+    .replace(/(mysql|mariadb):\/\/[^@/\s]+@/gi, '$1://***:***@')
+    .replace(/(password|pwd)=([^&\s;]+)/gi, '$1=***');
 }
 
 function normalizeVercelUrl(req) {
@@ -16,10 +18,16 @@ function normalizeVercelUrl(req) {
   if (rewrittenPath !== null) {
     params.delete('__path');
     const cleanTargetPath = pathOnly.startsWith('/api/index')
-      ? `/api/${String(rewrittenPath).replace(/^\/+/, '')}`
+      ? `/api/${String(rewrittenPath).replace(/^\/+/, '')}`.replace(/\/+$/, '') || '/api'
       : pathOnly;
     const qs = params.toString();
     req.url = qs ? `${cleanTargetPath}?${qs}` : cleanTargetPath;
+    return;
+  }
+
+  if (pathOnly === '/api/index' || pathOnly === '/api/index.js') {
+    const qs = params.toString();
+    req.url = qs ? `/api?${qs}` : '/api';
   }
 }
 

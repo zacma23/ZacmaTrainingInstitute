@@ -2,115 +2,180 @@ const express = require('express');
 const { randomUUID } = require('crypto');
 const { getPool, withTransaction } = require('../config/db');
 const { authenticate, requireRole, recordAuditLog } = require('../middleware/auth');
-const { getAddisTodayISO, validateEthiopianPhone, addMonthsISO, addDaysISO } = require('../utils/ethiopia');
+const { getAddisTodayISO, validateEthiopianPhone, addMonthsISO, addDaysISO, escapeCsvCell } = require('../utils/ethiopia');
 const { generateInstallmentSchedule, computeEnrollmentFinancials, generateNextStudentCode } = require('../services/feeService');
 const { runReminderCheck } = require('../services/reminderService');
 
 const router = express.Router();
 router.use(authenticate);
 
+async function queryFilteredStudents(filters = {}) {
+  const { search, studentName, studentId, courseId, paymentStatus, studentStatus, includeArchived } = filters;
+  const pool = getPool();
+  const todayISO = getAddisTodayISO();
+
+  let query = `
+    SELECT s.*,
+           e.id AS enrollmentId, e.courseId, e.paymentPlanId, e.courseStartDate,
+           e.expectedGraduationDate, e.totalCourseFee, e.assignedDueDate, e.enrollmentStatus,
+           c.name AS courseName, c.code AS courseCode, c.durationValue, c.durationUnit,
+           pp.code AS paymentPlanCode, pp.name AS paymentPlanName
+    FROM students s
+    LEFT JOIN enrollments e ON e.studentId = s.id AND e.enrollmentStatus != 'Archived'
+    LEFT JOIN courses c ON c.id = e.courseId
+    LEFT JOIN payment_plans pp ON pp.id = e.paymentPlanId
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (studentStatus) {
+    query += ' AND s.status = ?';
+    params.push(studentStatus);
+  } else if (includeArchived !== 'true') {
+    query += " AND s.status != 'Archived'";
+  }
+
+  if (courseId) {
+    query += ' AND e.courseId = ?';
+    params.push(courseId);
+  }
+
+  if (studentName && String(studentName).trim()) {
+    const sn = `%${String(studentName).trim().toLowerCase()}%`;
+    query += ' AND (LOWER(s.fullName) LIKE ? OR LOWER(s.phone) LIKE ? OR LOWER(s.altPhone) LIKE ?)';
+    params.push(sn, sn, sn);
+  }
+
+  if (studentId && String(studentId).trim()) {
+    const sid = `%${String(studentId).trim().toLowerCase()}%`;
+    query += ' AND (LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.nationalIdNumber) LIKE ?)';
+    params.push(sid, sid, sid);
+  }
+
+  if (search && String(search).trim()) {
+    const s = `%${String(search).trim().toLowerCase()}%`;
+    query += ' AND (LOWER(s.fullName) LIKE ? OR LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.phone) LIKE ? OR LOWER(s.altPhone) LIKE ? OR LOWER(s.nationalIdNumber) LIKE ?)';
+    params.push(s, s, s, s, s, s);
+  }
+
+  query += ' ORDER BY s.createdAt DESC';
+
+  const [rows] = await pool.query(query, params);
+  const [allInstallments] = await pool.query('SELECT * FROM installments ORDER BY installmentNumber ASC');
+  const [allTransactions] = await pool.query('SELECT * FROM transactions ORDER BY paymentDate ASC, createdAt ASC');
+
+  let result = rows.map((row) => {
+    const enr = {
+      id: row.enrollmentId,
+      totalCourseFee: Number(row.totalCourseFee || 0),
+      assignedDueDate: row.assignedDueDate,
+    };
+    const insts = allInstallments.filter((i) => i.enrollmentId === row.enrollmentId);
+    const txns = allTransactions.filter((t) => t.enrollmentId === row.enrollmentId);
+    const fin = row.enrollmentId
+      ? computeEnrollmentFinancials(enr, insts, txns, todayISO)
+      : {
+          totalCourseFee: 0,
+          totalPaid: 0,
+          remainingBalance: 0,
+          paymentStatus: 'Unpaid',
+          isOverdue: false,
+          overdueDays: 0,
+          nextDueDate: null,
+          nextDueAmount: 0,
+          installments: [],
+        };
+
+    return {
+      ...row,
+      totalCourseFee: fin.totalCourseFee,
+      totalPaid: fin.totalPaid,
+      remainingBalance: fin.remainingBalance,
+      paymentStatus: fin.paymentStatus,
+      isOverdue: fin.isOverdue,
+      overdueDays: fin.overdueDays,
+      nextDueDate: fin.nextDueDate,
+      nextDueAmount: fin.nextDueAmount,
+      installments: fin.installments,
+    };
+  });
+
+  if (paymentStatus) {
+    if (paymentStatus === 'Overdue') {
+      result = result.filter((r) => r.isOverdue);
+    } else {
+      result = result.filter((r) => r.paymentStatus === paymentStatus);
+    }
+  }
+
+  return result;
+}
+
 // GET all students with computed financial summary & filters
 router.get('/', async (req, res) => {
   try {
-    const { search, studentName, studentId, courseId, paymentStatus, studentStatus, includeArchived } = req.query;
-    const pool = getPool();
-    const todayISO = getAddisTodayISO();
-
-    let query = `
-      SELECT s.*,
-             e.id AS enrollmentId, e.courseId, e.paymentPlanId, e.courseStartDate,
-             e.expectedGraduationDate, e.totalCourseFee, e.assignedDueDate, e.enrollmentStatus,
-             c.name AS courseName, c.code AS courseCode, c.durationValue, c.durationUnit,
-             pp.code AS paymentPlanCode, pp.name AS paymentPlanName
-      FROM students s
-      LEFT JOIN enrollments e ON e.studentId = s.id AND e.enrollmentStatus != 'Archived'
-      LEFT JOIN courses c ON c.id = e.courseId
-      LEFT JOIN payment_plans pp ON pp.id = e.paymentPlanId
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (studentStatus) {
-      query += ' AND s.status = ?';
-      params.push(studentStatus);
-    } else if (includeArchived !== 'true') {
-      query += " AND s.status != 'Archived'";
-    }
-
-    if (courseId) {
-      query += ' AND e.courseId = ?';
-      params.push(courseId);
-    }
-
-    if (studentName && String(studentName).trim()) {
-      const sn = `%${String(studentName).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(s.fullName) LIKE ? OR LOWER(s.phone) LIKE ? OR LOWER(s.altPhone) LIKE ?)';
-      params.push(sn, sn, sn);
-    }
-
-    if (studentId && String(studentId).trim()) {
-      const sid = `%${String(studentId).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.nationalIdNumber) LIKE ?)';
-      params.push(sid, sid, sid);
-    }
-
-    if (search && String(search).trim()) {
-      const s = `%${String(search).trim().toLowerCase()}%`;
-      query += ' AND (LOWER(s.fullName) LIKE ? OR LOWER(s.studentCode) LIKE ? OR LOWER(s.id) LIKE ? OR LOWER(s.phone) LIKE ? OR LOWER(s.altPhone) LIKE ? OR LOWER(s.nationalIdNumber) LIKE ?)';
-      params.push(s, s, s, s, s, s);
-    }
-
-    query += ' ORDER BY s.createdAt DESC';
-
-    const [rows] = await pool.query(query, params);
-    const [allInstallments] = await pool.query('SELECT * FROM installments ORDER BY installmentNumber ASC');
-    const [allTransactions] = await pool.query('SELECT * FROM transactions ORDER BY paymentDate ASC, createdAt ASC');
-
-    let result = rows.map((row) => {
-      const enr = {
-        id: row.enrollmentId,
-        totalCourseFee: Number(row.totalCourseFee || 0),
-        assignedDueDate: row.assignedDueDate,
-      };
-      const insts = allInstallments.filter((i) => i.enrollmentId === row.enrollmentId);
-      const txns = allTransactions.filter((t) => t.enrollmentId === row.enrollmentId);
-      const fin = row.enrollmentId
-        ? computeEnrollmentFinancials(enr, insts, txns, todayISO)
-        : {
-            totalCourseFee: 0,
-            totalPaid: 0,
-            remainingBalance: 0,
-            paymentStatus: 'Unpaid',
-            isOverdue: false,
-            overdueDays: 0,
-            nextDueDate: null,
-            nextDueAmount: 0,
-            installments: [],
-          };
-
-      return {
-        ...row,
-        totalCourseFee: fin.totalCourseFee,
-        totalPaid: fin.totalPaid,
-        remainingBalance: fin.remainingBalance,
-        paymentStatus: fin.paymentStatus,
-        isOverdue: fin.isOverdue,
-        overdueDays: fin.overdueDays,
-        nextDueDate: fin.nextDueDate,
-        nextDueAmount: fin.nextDueAmount,
-        installments: fin.installments,
-      };
-    });
-
-    if (paymentStatus) {
-      if (paymentStatus === 'Overdue') {
-        result = result.filter((r) => r.isOverdue);
-      } else {
-        result = result.filter((r) => r.paymentStatus === paymentStatus);
-      }
-    }
-
+    const result = await queryFilteredStudents(req.query);
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET export filtered Student Directory as CSV (must come before GET /:id)
+router.get('/export', async (req, res) => {
+  try {
+    const students = await queryFilteredStudents(req.query);
+    const todayISO = getAddisTodayISO();
+    const columns = [
+      'Student ID',
+      'Full Name',
+      'Gender',
+      'Phone',
+      'Alt Phone',
+      'Email',
+      'Course',
+      'Plan',
+      'Total Fee (ETB)',
+      'Paid (ETB)',
+      'Balance (ETB)',
+      'Next Due',
+      'Payment Status',
+      'Student Status',
+      'Region',
+      'City',
+      'Registration Date',
+    ];
+
+    const lines = [
+      columns.map(escapeCsvCell).join(','),
+      ...students.map((s) =>
+        [
+          s.studentCode || '',
+          s.fullName || '',
+          s.gender || '',
+          s.phone || '',
+          s.altPhone || '',
+          s.email || '',
+          s.courseName || '',
+          s.paymentPlanName || '',
+          Number(s.totalCourseFee || 0).toFixed(2),
+          Number(s.totalPaid || 0).toFixed(2),
+          Number(s.remainingBalance || 0).toFixed(2),
+          s.nextDueDate ? String(s.nextDueDate).slice(0, 10) : 'Settled',
+          s.isOverdue ? `Overdue (${s.overdueDays}d)` : s.paymentStatus || '',
+          s.status || '',
+          s.region || '',
+          s.city || '',
+          s.registrationDate ? String(s.registrationDate).slice(0, 10) : '',
+        ]
+          .map(escapeCsvCell)
+          .join(',')
+      ),
+    ];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="student_directory_${todayISO}.csv"`);
+    res.send('\uFEFF' + lines.join('\n'));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

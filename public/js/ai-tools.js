@@ -54,8 +54,8 @@
     const isPdf = rawMime === 'application/pdf' || /\.pdf$/i.test(file.name || '');
 
     if (isPdf) {
-      if (file.size > 4.2 * 1024 * 1024) {
-        throw new Error('PDF file exceeds 4.2 MB limit. Please upload a smaller PDF.');
+      if (file.size > 3.0 * 1024 * 1024) {
+        throw new Error('PDF file exceeds 3.0 MB limit (Vercel 4.5 MB request cap). Please upload a smaller PDF.');
       }
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();

@@ -2,28 +2,30 @@
 
 ## Option A: Hosting on Vercel (Recommended Cloud Deployment)
 
-This repository includes `api/index.js` and `vercel.json` configured for **Vercel Serverless Functions + Edge Static CDN**.
+This repository includes `api/index.js` and `vercel.json` configured for **Vercel Serverless Functions + Edge Static CDN + Daily Vercel Cron**.
 
 1. **Managed Cloud MySQL Database**:
    Vercel serverless functions require an externally reachable MySQL/MariaDB server (e.g., **TiDB Cloud Serverless**, **Aiven**, **Railway**, **AWS RDS**, or **DigitalOcean Managed MySQL**).
    - Either set `DATABASE_URL` (e.g. `mysql://user:pass@host:4000/sfmt_ethiopia?ssl-mode=REQUIRED`)
-   - Or set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSL=true` (plus `DB_SSL_CA` if your provider requires a custom CA certificate).
+   - Or set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSL=true` (use `DB_SSL=skip-verify` or `DB_SSL_CA` if your provider uses a self-signed proxy certificate).
    - On first API request, `api/index.js` automatically applies `sql/schema.sql`, runs schema upgrades, and seeds baseline roles/courses/plans. After initial provisioning, you can optionally set `DB_SKIP_SCHEMA_SYNC=true` for faster cold starts.
 
-2. **Required Vercel Environment Variables**:
+2. **Required Vercel Environment Variables (Project Settings → Environment Variables)**:
    - `DATABASE_URL` (or `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`)
-   - `JWT_SECRET` (generate with `openssl rand -hex 32`)
+   - `JWT_SECRET` (generate with `openssl rand -hex 32`, minimum 16 characters)
    - `NODE_ENV=production`
    - `TZ=Africa/Addis_Ababa`
-   - `GEMINI_API_KEY` (required if using the Operations & Fee Assistant chatbot)
-   - `CRON_SECRET` (optional bearer token protecting `GET /api/cron/reminders`)
+   - `GEMINI_API_KEY` (required for Fayda ID scanning, slip OCR, and Operations & Fee Assistant)
+   - `CRON_SECRET` (recommended: Vercel automatically sends `Authorization: Bearer <CRON_SECRET>` to `GET /api/cron/reminders`)
    - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional Firebase Admin JSON or base64 string)
+   - Optional SMS / Email gateway variables (`SMS_PROVIDER`, `AFROMESSAGE_TOKEN`, `SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`, or `RESEND_API_KEY`)
 
 3. **Firebase Google Sign-In Domain Allowlist**:
-   Add your deployed Vercel domain (`your-app.vercel.app`) in **Firebase Console → Authentication → Settings → Authorized domains**.
+   Add your deployed Vercel domain (`your-app.vercel.app` and any custom domain) in **Firebase Console → Authentication → Settings → Authorized domains**.
 
-4. **Automated Reminders on Vercel**:
-   External/Vercel Cron can call `GET https://your-app.vercel.app/api/cron/reminders` daily with header `Authorization: Bearer <CRON_SECRET>`.
+4. **Automated Daily Reminders & Health Probe**:
+   - `vercel.json` schedules daily Vercel Cron (`0 5 * * *`, 08:00 AM Addis Ababa time) on `GET /api/cron/reminders`.
+   - Verify deployment readiness at `GET https://your-app.vercel.app/api/health`.
 
 ---
 

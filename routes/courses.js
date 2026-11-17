@@ -21,12 +21,15 @@ router.get('/courses', authenticate, async (req, res) => {
   try {
     const pool = getPool();
     const [courses] = await pool.query(`
-      SELECT c.*,
-             COUNT(DISTINCT CASE WHEN s.status != 'Archived' AND e.enrollmentStatus != 'Archived' THEN e.studentId END) AS enrolledStudents
+      SELECT c.*, COALESCE(ec.enrolledStudents, 0) AS enrolledStudents
       FROM courses c
-      LEFT JOIN enrollments e ON e.courseId = c.id
-      LEFT JOIN students s ON s.id = e.studentId
-      GROUP BY c.id
+      LEFT JOIN (
+        SELECT e.courseId, COUNT(DISTINCT e.studentId) AS enrolledStudents
+        FROM enrollments e
+        JOIN students s ON s.id = e.studentId
+        WHERE s.status != 'Archived' AND e.enrollmentStatus != 'Archived'
+        GROUP BY e.courseId
+      ) ec ON ec.courseId = c.id
       ORDER BY c.name ASC
     `);
 

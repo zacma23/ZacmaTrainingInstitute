@@ -1,21 +1,61 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+  "installCommand": "npm install --no-audit --no-fund",
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "functions": {
     "api/index.js": {
       "maxDuration": 30,
-      "includeFiles": "{server.js,config/**,middleware/**,routes/**,services/**,sql/**,utils/**,firebase-applet-config.json}"
+      "includeFiles": "{server.js,config/**,middleware/**,routes/**,services/**,sql/**,utils/**,data/db.json,firebase-applet-config.json}"
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 5 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/vendor/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/(styles\\.css|app\\.js|js/.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/api",
+      "destination": "/api/index.js"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api/index.js?__path=$1"
     },
     {
-      "source": "/((?!api/|assets/|js/|vendor/|styles\\.css|app\\.js|favicon\\.ico).*)",
+      "source": "/((?!api(?:/|$)|assets/|js/|vendor/|styles\\.css|app\\.js|favicon\\.ico).*)",
       "destination": "/index.html"
     }
   ]

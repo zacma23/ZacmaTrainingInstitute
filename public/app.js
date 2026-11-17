@@ -816,24 +816,28 @@ function renderDashboardCharts(charts) {
 document.getElementById('refreshDashboardBtn').addEventListener('click', loadDashboard);
 
 // ================= ADMIN 2. STUDENTS =================
+function getStudentDirectoryFilterParams() {
+  const studentName = document.getElementById('studentSearchInput').value.trim();
+  const studentId = document.getElementById('studentIdSearchInput').value.trim();
+  const courseId = document.getElementById('studentCourseFilter').value;
+  const paymentStatus = document.getElementById('studentPaymentFilter').value;
+  const studentStatus = document.getElementById('studentStatusFilter').value;
+
+  const params = new URLSearchParams();
+  if (studentName) params.set('studentName', studentName);
+  if (studentId) params.set('studentId', studentId);
+  if (courseId) params.set('courseId', courseId);
+  if (paymentStatus) params.set('paymentStatus', paymentStatus);
+  if (studentStatus) {
+    params.set('studentStatus', studentStatus);
+    if (studentStatus === 'Archived') params.set('includeArchived', 'true');
+  }
+  return params;
+}
+
 async function loadStudents() {
   try {
-    const studentName = document.getElementById('studentSearchInput').value.trim();
-    const studentId = document.getElementById('studentIdSearchInput').value.trim();
-    const courseId = document.getElementById('studentCourseFilter').value;
-    const paymentStatus = document.getElementById('studentPaymentFilter').value;
-    const studentStatus = document.getElementById('studentStatusFilter').value;
-
-    const params = new URLSearchParams();
-    if (studentName) params.set('studentName', studentName);
-    if (studentId) params.set('studentId', studentId);
-    if (courseId) params.set('courseId', courseId);
-    if (paymentStatus) params.set('paymentStatus', paymentStatus);
-    if (studentStatus) {
-      params.set('studentStatus', studentStatus);
-      if (studentStatus === 'Archived') params.set('includeArchived', 'true');
-    }
-
+    const params = getStudentDirectoryFilterParams();
     const students = await apiJson(`/api/students?${params.toString()}`);
     AppState.students = students;
 
@@ -896,6 +900,25 @@ document.getElementById('adminStudentClearSearchBtn')?.addEventListener('click',
   document.getElementById('studentPaymentFilter').value = '';
   document.getElementById('studentStatusFilter').value = '';
   loadStudents();
+});
+
+document.getElementById('downloadStudentDirectoryBtn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('downloadStudentDirectoryBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const params = getStudentDirectoryFilterParams();
+    const qs = params.toString();
+    const todayISO = getAddisTodayClientISO();
+    await downloadAuthorizedFile(
+      `/api/students/export${qs ? `?${qs}` : ''}`,
+      `student_directory_${todayISO}.csv`
+    );
+    showToast('Student directory CSV exported.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to export student directory.', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 });
 
 document.getElementById('openNewStudentBtn').addEventListener('click', () => {
