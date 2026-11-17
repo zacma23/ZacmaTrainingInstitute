@@ -61,6 +61,8 @@ router.put('/', requireRole('admin'), async (req, res) => {
       'receiptFooterNote',
       'smsFromNumber',
       'smsSenderId',
+      'emailFromAddress',
+      'emailFromName',
     ];
 
     const pool = getPool();

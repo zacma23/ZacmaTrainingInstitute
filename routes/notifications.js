@@ -3,7 +3,13 @@ const { randomUUID } = require('crypto');
 const { getPool } = require('../config/db');
 const { authenticate, requireRole, recordAuditLog } = require('../middleware/auth');
 const { runReminderCheck } = require('../services/reminderService');
-const { getGatewayStatus, dispatchReminderMessage } = require('../services/messagingService');
+const {
+  getGatewayStatus,
+  dispatchReminderMessage,
+  dispatchEmailMessage,
+  normalizeEmailAddress,
+  normalizePhoneForProvider,
+} = require('../services/messagingService');
 const { computeEnrollmentFinancials } = require('../services/feeService');
 const { getAddisTodayISO, formatETB } = require('../utils/ethiopia');
 
@@ -22,9 +28,18 @@ function buildScopeSql(user) {
 
 async function getMessagingSettings(pool) {
   const [rows] = await pool.query(
-    "SELECT settingKey, settingValue FROM settings WHERE settingKey IN ('instituteName', 'instituteShortName', 'institutePhone', 'smsFromNumber', 'smsSenderId')"
+    "SELECT settingKey, settingValue FROM settings WHERE settingKey IN ('instituteName', 'instituteShortName', 'institutePhone', 'instituteEmail', 'smsFromNumber', 'smsSenderId', 'emailFromAddress', 'emailFromName')"
   );
   return Object.fromEntries(rows.map((r) => [r.settingKey, r.settingValue]));
+}
+
+function personalizeText(template, st, instituteName) {
+  return String(template || '')
+    .replace(/\{studentName\}/gi, st.fullName || 'Student')
+    .replace(/\{studentCode\}/gi, st.studentCode || '')
+    .replace(/\{courseName\}/gi, st.courseName || 'your course')
+    .replace(/\{balance\}/gi, formatETB(st.remainingBalance || 0))
+    .replace(/\{instituteName\}/gi, instituteName);
 }
 
 // List role-scoped notifications
@@ -36,7 +51,7 @@ router.get('/', async (req, res) => {
 
     let query = `
       SELECT n.*,
-             s.fullName AS studentName, s.studentCode, s.phone,
+             s.fullName AS studentName, s.studentCode, s.phone, s.email,
              c.name AS courseName
       FROM notifications n
       LEFT JOIN students s ON n.studentId = s.id
@@ -77,7 +92,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Send message to student(s) via configured phone number provider (ADMIN ONLY)
+// Send message / email to student(s) via configured phone provider or email provider (ADMIN ONLY)
 router.post('/send-message', requireRole('admin'), async (req, res) => {
   try {
     const {
@@ -86,6 +101,9 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
       studentIds = [],
       courseId = '',
       channel = 'sms',
+      senderPhone = '',
+      senderEmail = '',
+      subject = '',
       title = 'Institute Notification',
       message = '',
       notificationId = '',
@@ -95,18 +113,43 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
     if (!cleanMessage) {
       return res.status(400).json({ error: 'Message text is required.' });
     }
-    if (!['sms', 'whatsapp'].includes(channel)) {
-      return res.status(400).json({ error: 'Invalid messaging channel. Use sms or whatsapp.' });
+    if (!['sms', 'whatsapp', 'email', 'both'].includes(channel)) {
+      return res.status(400).json({ error: 'Invalid messaging channel. Use sms, email, both, or whatsapp.' });
+    }
+
+    const cleanSenderPhone = String(senderPhone || '').trim();
+    if (cleanSenderPhone && (channel === 'sms' || channel === 'whatsapp' || channel === 'both')) {
+      const phoneCheck = normalizePhoneForProvider(cleanSenderPhone);
+      if (!phoneCheck.valid) {
+        return res.status(400).json({ error: `Invalid sender phone number: ${phoneCheck.error}` });
+      }
+    }
+
+    const cleanSenderEmail = String(senderEmail || '').trim();
+    if (cleanSenderEmail && (channel === 'email' || channel === 'both')) {
+      const emailCheck = normalizeEmailAddress(cleanSenderEmail);
+      if (!emailCheck.valid) {
+        return res.status(400).json({ error: `Invalid sender email address: ${emailCheck.error}` });
+      }
     }
 
     const pool = getPool();
     const todayISO = getAddisTodayISO();
     const settings = await getMessagingSettings(pool);
-    const gateway = getGatewayStatus(settings);
+    const effectiveSettings = {
+      ...settings,
+      ...(cleanSenderPhone ? { smsFromNumber: cleanSenderPhone } : {}),
+      ...(cleanSenderEmail ? { emailFromAddress: cleanSenderEmail } : {}),
+    };
+    const gateway = getGatewayStatus(effectiveSettings);
     const instituteName = settings.instituteName || 'Zacma Technology Institute';
+    const activeFromPhone = gateway.sms.fromNumber || '';
+    const activeFromEmail = gateway.email.fromEmail || '';
+    const activeFromName = gateway.email.fromName || instituteName;
+    const rawSubject = String(subject || title || 'Institute Notification').trim();
 
     let studentQuery = `
-      SELECT s.id AS studentId, s.studentCode, s.fullName, s.phone, s.status AS studentStatus,
+      SELECT s.id AS studentId, s.studentCode, s.fullName, s.phone, s.email, s.status AS studentStatus,
              e.id AS enrollmentId, e.courseId, e.totalCourseFee, e.registrationFee, e.courseStartDate,
              e.assignedDueDate, e.enrollmentStatus,
              c.name AS courseName
@@ -133,9 +176,7 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
       }
       studentQuery += ' AND e.courseId = ?';
       params.push(courseId);
-    } else if (targetMode === 'overdue' || targetMode === 'unpaid') {
-      studentQuery += " AND s.status IN ('Active', 'Suspended')";
-    } else if (targetMode === 'all') {
+    } else if (targetMode === 'overdue' || targetMode === 'unpaid' || targetMode === 'all') {
       studentQuery += " AND s.status IN ('Active', 'Suspended')";
     } else {
       return res.status(400).json({ error: 'Unsupported targetMode.' });
@@ -144,7 +185,6 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
     studentQuery += ' ORDER BY s.fullName ASC LIMIT 250';
     const [rawRows] = await pool.query(studentQuery, params);
 
-    // Deduplicate by studentId (keep primary enrollment if multiple)
     const studentMap = new Map();
     for (const r of rawRows) {
       if (!studentMap.has(r.studentId)) {
@@ -214,33 +254,109 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
     let notConfiguredCount = 0;
 
     for (const st of targets) {
-      const personalized = cleanMessage
-        .replace(/\{studentName\}/gi, st.fullName || 'Student')
-        .replace(/\{studentCode\}/gi, st.studentCode || '')
-        .replace(/\{courseName\}/gi, st.courseName || 'your course')
-        .replace(/\{balance\}/gi, formatETB(st.remainingBalance || 0))
-        .replace(/\{instituteName\}/gi, instituteName);
+      const personalized = personalizeText(cleanMessage, st, instituteName);
+      const personalizedSubject = personalizeText(rawSubject, st, instituteName).slice(0, 190);
 
-      const dispatch = await dispatchReminderMessage({
-        phone: st.phone,
-        message: personalized,
-        channel,
-        fromNumber: settings.smsFromNumber || '',
-        senderId: settings.smsSenderId || '',
-      });
+      let smsDispatch = null;
+      let emailDispatch = null;
+      let combinedSent = false;
+      let channelStatus = 'FAILED';
+      let detail = '';
 
-      if (dispatch.sent) sentCount++;
-      else if (dispatch.channelStatus === 'SMS_NOT_CONFIGURED' || dispatch.channelStatus === 'WHATSAPP_NOT_CONFIGURED') {
+      if (channel === 'sms' || channel === 'whatsapp') {
+        smsDispatch = await dispatchReminderMessage({
+          phone: st.phone,
+          message: personalized,
+          channel,
+          fromNumber: activeFromPhone,
+          senderId: settings.smsSenderId || '',
+        });
+        combinedSent = smsDispatch.sent;
+        channelStatus = smsDispatch.channelStatus;
+        detail = smsDispatch.detail;
+      } else if (channel === 'email') {
+        emailDispatch = await dispatchEmailMessage({
+          toEmail: st.email,
+          toName: st.fullName || 'Student',
+          subject: personalizedSubject,
+          message: personalized,
+          fromEmail: activeFromEmail,
+          fromName: activeFromName,
+          replyTo: activeFromEmail,
+          instituteName,
+        });
+        combinedSent = emailDispatch.sent;
+        channelStatus = emailDispatch.channelStatus;
+        detail = emailDispatch.detail;
+      } else if (channel === 'both') {
+        [smsDispatch, emailDispatch] = await Promise.all([
+          dispatchReminderMessage({
+            phone: st.phone,
+            message: personalized,
+            channel: 'sms',
+            fromNumber: activeFromPhone,
+            senderId: settings.smsSenderId || '',
+          }),
+          dispatchEmailMessage({
+            toEmail: st.email,
+            toName: st.fullName || 'Student',
+            subject: personalizedSubject,
+            message: personalized,
+            fromEmail: activeFromEmail,
+            fromName: activeFromName,
+            replyTo: activeFromEmail,
+            instituteName,
+          }),
+        ]);
+
+        if (smsDispatch.sent && emailDispatch.sent) {
+          combinedSent = true;
+          channelStatus = 'SENT';
+        } else if (smsDispatch.sent || emailDispatch.sent) {
+          combinedSent = true;
+          channelStatus = 'PARTIAL';
+        } else if (
+          smsDispatch.channelStatus === 'SMS_NOT_CONFIGURED' &&
+          emailDispatch.channelStatus === 'EMAIL_NOT_CONFIGURED'
+        ) {
+          combinedSent = false;
+          channelStatus = 'SMS_NOT_CONFIGURED';
+        } else {
+          combinedSent = false;
+          channelStatus = 'FAILED';
+        }
+        detail = `SMS: ${smsDispatch.detail} | Email: ${emailDispatch.detail}`;
+      }
+
+      if (combinedSent) {
+        sentCount++;
+      } else if (
+        channelStatus === 'SMS_NOT_CONFIGURED' ||
+        channelStatus === 'WHATSAPP_NOT_CONFIGURED' ||
+        channelStatus === 'EMAIL_NOT_CONFIGURED'
+      ) {
         notConfiguredCount++;
       } else {
         failedCount++;
       }
 
+      const logPrefix =
+        channel === 'email'
+          ? `[EMAIL -> ${st.email || 'no-email'}${activeFromEmail ? ` (From ${activeFromEmail})` : ''} | Subj: ${personalizedSubject}]`
+          : channel === 'both'
+            ? `[SMS -> ${st.phone}${activeFromPhone ? ` (From ${activeFromPhone})` : ''} & EMAIL -> ${st.email || 'no-email'}${activeFromEmail ? ` (From ${activeFromEmail})` : ''}]`
+            : `[${channel.toUpperCase()} -> ${st.phone}${activeFromPhone ? ` (From ${activeFromPhone})` : ''}]`;
+
+      const logTitle = (
+        channel === 'email' || channel === 'both'
+          ? personalizedSubject || title || 'Student Email Notification'
+          : title || 'Student Phone Notification'
+      )
+        .trim()
+        .slice(0, 190);
+
       if (notificationId && targets.length === 1) {
-        await pool.query(
-          'UPDATE notifications SET channelStatus = ? WHERE id = ?',
-          [dispatch.channelStatus, notificationId]
-        );
+        await pool.query('UPDATE notifications SET channelStatus = ? WHERE id = ?', [channelStatus, notificationId]);
       } else {
         const msgId = randomUUID();
         const dedupeKey = `MSG:${st.studentId}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
@@ -253,11 +369,11 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
             st.studentId,
             st.enrollmentId || null,
             dedupeKey,
-            String(title || 'Student Phone Notification').trim().slice(0, 190),
-            `[${channel.toUpperCase()} -> ${st.phone}] ${personalized}`,
+            logTitle,
+            `${logPrefix} ${personalized}`,
             Number(st.remainingBalance || 0),
             todayISO,
-            dispatch.channelStatus,
+            channelStatus,
           ]
         );
       }
@@ -267,9 +383,12 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
         studentCode: st.studentCode,
         fullName: st.fullName,
         phone: st.phone,
-        sent: dispatch.sent,
-        channelStatus: dispatch.channelStatus,
-        detail: dispatch.detail,
+        email: st.email || '',
+        sent: combinedSent,
+        channelStatus,
+        smsStatus: smsDispatch ? smsDispatch.channelStatus : null,
+        emailStatus: emailDispatch ? emailDispatch.channelStatus : null,
+        detail,
       });
     }
 
@@ -280,8 +399,10 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
       entityId: targetMode === 'single' ? targets[0].studentId : targetMode,
       newValue: {
         channel,
-        provider: channel === 'sms' ? gateway.sms.provider : gateway.whatsapp.provider,
-        fromNumber: gateway.sms.fromNumber || '',
+        smsProvider: gateway.sms.provider,
+        emailProvider: gateway.email.provider,
+        fromNumber: activeFromPhone,
+        fromEmail: activeFromEmail,
         totalTargeted: targets.length,
         sentCount,
         failedCount,
@@ -290,19 +411,41 @@ router.post('/send-message', requireRole('admin'), async (req, res) => {
       ipAddress: req.ip,
     });
 
+    const channelLabel = channel === 'both' ? 'SMS & Email' : channel.toUpperCase();
+    const providerLabel =
+      channel === 'email'
+        ? gateway.email.provider
+        : channel === 'both'
+          ? `${gateway.sms.provider}/${gateway.email.provider}`
+          : channel === 'whatsapp'
+            ? gateway.whatsapp.provider
+            : gateway.sms.provider;
+
     const summaryMsg =
       sentCount > 0
-        ? `Sent ${sentCount} of ${targets.length} ${channel.toUpperCase()} message(s) via ${channel === 'sms' ? gateway.sms.provider : gateway.whatsapp.provider}.`
+        ? `Sent ${sentCount} of ${targets.length} ${channelLabel} message(s) via ${providerLabel}.`
         : notConfiguredCount === targets.length
-          ? `${channel.toUpperCase()} provider is not configured on the server yet (${targets.length} message(s) logged as not configured).`
-          : `Failed to deliver ${failedCount} of ${targets.length} message(s).`;
+          ? `${channelLabel} provider is not configured on the server yet (${targets.length} message(s) logged as not configured).`
+          : `Failed to deliver ${failedCount} of ${targets.length} ${channelLabel} message(s).`;
+
+    const gatewayConfigured =
+      channel === 'email'
+        ? gateway.email.configured
+        : channel === 'both'
+          ? gateway.sms.configured || gateway.email.configured
+          : channel === 'whatsapp'
+            ? gateway.whatsapp.configured
+            : gateway.sms.configured;
 
     res.json({
       message: summaryMsg,
       channel,
-      provider: channel === 'sms' ? gateway.sms.provider : gateway.whatsapp.provider,
-      fromNumber: gateway.sms.fromNumber || '',
-      gatewayConfigured: channel === 'sms' ? gateway.sms.configured : gateway.whatsapp.configured,
+      provider: providerLabel,
+      fromNumber: activeFromPhone,
+      fromEmail: activeFromEmail,
+      smsGateway: gateway.sms,
+      emailGateway: gateway.email,
+      gatewayConfigured,
       totalTargeted: targets.length,
       sentCount,
       failedCount,

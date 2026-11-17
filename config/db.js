@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 const mysql = require('mysql2/promise');
 const logger = require('./logger');
 
@@ -74,6 +74,21 @@ function getDbConfig() {
 function ensureLocalMariaDbRunning(host) {
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return;
   if (host !== '127.0.0.1' && host !== 'localhost') return;
+
+  try {
+    execSync('which mariadbd || which mysqld', { stdio: 'ignore' });
+  } catch {
+    try {
+      logger.info('Local MariaDB binary not found; attempting automatic package installation...');
+      execSync(
+        'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" mariadb-server',
+        { stdio: 'ignore' }
+      );
+    } catch (installErr) {
+      logger.warn('Could not auto-install local MariaDB server', { error: installErr.message });
+    }
+  }
+
   try {
     execSync('pgrep -x mariadbd || pgrep -x mysqld', { stdio: 'ignore' });
   } catch {
@@ -84,6 +99,66 @@ function ensureLocalMariaDbRunning(host) {
       logger.warn('Could not auto-start local MariaDB service', { error: err.message });
     }
   }
+}
+
+function isAccessDeniedError(err) {
+  return Boolean(
+    err &&
+      (err.errno === 1045 ||
+        err.errno === 1044 ||
+        err.errno === 1698 ||
+        err.code === 'ER_ACCESS_DENIED_ERROR' ||
+        err.code === 'ER_ACCESS_DENIED_NO_PASSWORD_ERROR' ||
+        err.code === 'ER_DBACCESS_DENIED_ERROR' ||
+        err.sqlState === '28000')
+  );
+}
+
+function escapeSqlLiteral(val) {
+  return String(val ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
+}
+
+function escapeSqlIdentifier(val) {
+  return String(val ?? '').replace(/`/g, '``');
+}
+
+function ensureLocalMysqlUserAndDb(cfg) {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return false;
+  if (cfg.host !== '127.0.0.1' && cfg.host !== 'localhost') return false;
+
+  const dbIdent = escapeSqlIdentifier(cfg.database);
+  const sqlLines = [
+    `CREATE DATABASE IF NOT EXISTS \`${dbIdent}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+  ];
+
+  if (cfg.user && cfg.user !== 'root') {
+    const uLit = escapeSqlLiteral(cfg.user);
+    const pLit = escapeSqlLiteral(cfg.password);
+    for (const hostSpec of ['localhost', '127.0.0.1', '%']) {
+      sqlLines.push(`CREATE USER IF NOT EXISTS '${uLit}'@'${hostSpec}' IDENTIFIED BY '${pLit}';`);
+      sqlLines.push(`ALTER USER '${uLit}'@'${hostSpec}' IDENTIFIED BY '${pLit}';`);
+      sqlLines.push(`GRANT ALL PRIVILEGES ON \`${dbIdent}\`.* TO '${uLit}'@'${hostSpec}';`);
+    }
+  }
+  sqlLines.push('FLUSH PRIVILEGES;');
+  const sql = sqlLines.join('\n');
+
+  for (const bin of ['mariadb', 'mysql']) {
+    const res = spawnSync(bin, ['-u', 'root'], {
+      input: sql,
+      encoding: 'utf8',
+    });
+    if (res.status === 0) {
+      logger.info('Bootstrapped local MariaDB database and user privileges', {
+        database: cfg.database,
+        user: cfg.user,
+      });
+      return true;
+    }
+  }
+  return false;
 }
 
 async function applySchemaAndUpgrades(conn, database) {
@@ -111,13 +186,16 @@ async function applySchemaAndUpgrades(conn, database) {
        (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'students' AND COLUMN_NAME = 'nationalIdNumber') AS hasStudentNid,
        (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'registration_applications' AND COLUMN_NAME = 'nationalIdNumber') AS hasAppNid`,
-    [database, database, database]
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'registration_applications' AND COLUMN_NAME = 'nationalIdNumber') AS hasAppNid,
+       (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'notifications' AND COLUMN_NAME = 'channelStatus' AND COLUMN_TYPE LIKE '%EMAIL_NOT_CONFIGURED%') AS hasEmailChannelEnum`,
+    [database, database, database, database]
   );
   if (
     Number(upgradeMarker.hasSmsEnum) === 0 ||
     Number(upgradeMarker.hasStudentNid) === 0 ||
     Number(upgradeMarker.hasAppNid) === 0 ||
+    Number(upgradeMarker.hasEmailChannelEnum) === 0 ||
     Number(tablesRow.cnt) < 4
   ) {
     await ensureSchemaUpgrades(conn, database);
@@ -169,10 +247,17 @@ async function initDatabase() {
       ...(cfg.ssl ? { ssl: cfg.ssl } : {}),
     });
 
+    let localBootstrapped = false;
     const connectWithAutoSsl = async (withDatabase) => {
       try {
         return await mysql.createConnection(buildConnOpts(withDatabase));
       } catch (err) {
+        if (isLocalHost && !localBootstrapped && isAccessDeniedError(err)) {
+          localBootstrapped = true;
+          if (ensureLocalMysqlUserAndDb(cfg)) {
+            return await mysql.createConnection(buildConnOpts(withDatabase));
+          }
+        }
         if (!cfg.ssl && !isLocalHost && isSecureTransportError(err)) {
           cfg.ssl = { minVersion: 'TLSv1.2', rejectUnauthorized: true };
           logger.info('Remote cloud MySQL requires TLS; retrying connection with SSL enabled', { host: cfg.host });
@@ -412,7 +497,11 @@ async function ensureSchemaUpgrades(conn, dbName) {
       'NEW_REGISTRATION', 'NEW_PAYMENT_SUBMISSION',
       'REGISTRATION_APPROVED', 'REGISTRATION_REJECTED', 'CORRECTION_REQUIRED',
       'PAYMENT_APPROVED', 'PAYMENT_REJECTED', 'STUDENT_MESSAGE'
-    ) NOT NULL
+    ) NOT NULL,
+    MODIFY COLUMN channelStatus ENUM(
+      'IN_APP_ONLY', 'WHATSAPP_NOT_CONFIGURED', 'SMS_NOT_CONFIGURED',
+      'EMAIL_NOT_CONFIGURED', 'PARTIAL', 'SENT', 'FAILED'
+    ) NOT NULL DEFAULT 'IN_APP_ONLY'
   `);
 
   await addColumnIfMissing(conn, dbName, 'audit_logs', 'previousValue', 'previousValue JSON NULL AFTER entityId');

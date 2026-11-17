@@ -1,3 +1,4 @@
+const nodemailer = require('nodemailer');
 const logger = require('../config/logger');
 const { validateEthiopianPhone } = require('../utils/ethiopia');
 
@@ -13,10 +14,30 @@ function normalizePhoneForProvider(rawPhone) {
   return { valid: false, normalized: '', error: et.error || 'Invalid phone number format.' };
 }
 
+function normalizeEmailAddress(rawEmail) {
+  const clean = String(rawEmail || '').trim();
+  if (!clean) {
+    return { valid: false, normalized: '', error: 'Email address is missing.' };
+  }
+  const basicRe = /^[^\s@<>()[\]\\,;:\s@"]+@[^\s@<>()[\]\\,;:\s@"]+\.[^\s@<>()[\]\\,;:\s@"]{2,}$/;
+  if (!basicRe.test(clean)) {
+    return { valid: false, normalized: '', error: `Invalid email address "${clean}".` };
+  }
+  return { valid: true, normalized: clean.toLowerCase() };
+}
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
- * Honest WhatsApp & SMS Phone Provider Integration Architecture.
- * Never claims a message was sent externally unless a real provider is configured
- * via server environment variables and returns a confirmed HTTP delivery response.
+ * Honest WhatsApp, SMS Phone Provider, and SMTP/Resend Email Gateway Status.
+ * Never claims a message was delivered externally unless a real provider is configured
+ * and returns a confirmed delivery response.
  */
 function getGatewayStatus(overrides = {}) {
   const whatsappProvider = (process.env.WHATSAPP_PROVIDER || 'none').trim().toLowerCase();
@@ -35,12 +56,10 @@ function getGatewayStatus(overrides = {}) {
   const atKey = (process.env.AFRICASTALKING_API_KEY || process.env.SMS_API_KEY || '').trim();
 
   const afroToken = (process.env.AFROMESSAGE_TOKEN || process.env.SMS_API_KEY || '').trim();
-  const afroFromId = (process.env.AFROMESSAGE_IDENTIFIER_ID || overrides.smsFromNumber || process.env.SMS_FROM_NUMBER || '').trim();
-
   const customUrl = (process.env.SMS_API_URL || '').trim();
   const customKey = (process.env.SMS_API_KEY || '').trim();
 
-  // Auto-detect provider if specific credentials exist even when SMS_PROVIDER wasn't explicitly named
+  // Auto-detect SMS provider if credentials exist even when SMS_PROVIDER wasn't explicitly named
   if (!smsProvider || smsProvider === 'none') {
     if (twilioSid && twilioToken && twilioFrom) smsProvider = 'twilio';
     else if (atUser && atKey) smsProvider = 'africastalking';
@@ -72,6 +91,34 @@ function getGatewayStatus(overrides = {}) {
     Boolean(process.env.WHATSAPP_API_URL) &&
     Boolean(process.env.WHATSAPP_API_TOKEN);
 
+  // Email Gateway Detection (Resend HTTP API or Nodemailer SMTP)
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+  const smtpUrl = (process.env.SMTP_URL || '').trim();
+  const smtpHost = (process.env.SMTP_HOST || '').trim();
+  const smtpUser = (process.env.SMTP_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || '').trim();
+
+  let emailProvider = 'none';
+  if (resendKey) emailProvider = 'resend';
+  else if (smtpUrl || (smtpHost && smtpUser && smtpPass)) emailProvider = 'smtp';
+
+  const fromEmail = (
+    overrides.emailFromAddress ||
+    overrides.instituteEmail ||
+    process.env.EMAIL_FROM ||
+    process.env.SMTP_FROM ||
+    smtpUser ||
+    ''
+  ).trim();
+  const fromName = (
+    overrides.emailFromName ||
+    overrides.instituteName ||
+    process.env.EMAIL_FROM_NAME ||
+    'Zacma Technology Institute'
+  ).trim();
+
+  const emailConfigured = emailProvider !== 'none';
+
   return {
     whatsapp: {
       provider: whatsappConfigured ? whatsappProvider : 'none',
@@ -88,6 +135,15 @@ function getGatewayStatus(overrides = {}) {
       statusMessage: smsConfigured
         ? `Configured (${smsProvider}${fromNumber ? ` · From ${fromNumber}` : senderId ? ` · Sender ${senderId}` : ''})`
         : 'Not configured — configure provider env vars in .env / Vercel',
+    },
+    email: {
+      provider: emailProvider,
+      configured: emailConfigured,
+      fromEmail,
+      fromName,
+      statusMessage: emailConfigured
+        ? `Configured (${emailProvider}${fromEmail ? ` · From ${fromEmail}` : ''})`
+        : 'Not configured — set SMTP_HOST/SMTP_USER/SMTP_PASS or RESEND_API_KEY in .env / Vercel',
     },
   };
 }
@@ -220,7 +276,7 @@ async function dispatchReminderMessage({
         logger.warn("Africa's Talking SMS API error", { status: response.status });
         return { sent: false, channelStatus: 'FAILED', detail: payload.SMSMessageData?.Message || `HTTP ${response.status}` };
       }
-      return { sent: true, channelStatus: 'SENT', detail: "Sent via Africa's Talking" };
+      return { sent: true, channelStatus: 'SENT', detail: `Sent via Africa's Talking${activeFrom ? ` (${activeFrom})` : ''}` };
     }
 
     if (provider === 'afromessage') {
@@ -250,7 +306,7 @@ async function dispatchReminderMessage({
       return { sent: true, channelStatus: 'SENT', detail: 'Sent via AfroMessage' };
     }
 
-    // Generic / Custom HTTP Phone Gateway (e.g. Android SMS Gateway, local gateway, custom webhook)
+    // Generic / Custom HTTP Phone Gateway
     const response = await fetch(process.env.SMS_API_URL, {
       method: 'POST',
       headers: {
@@ -286,8 +342,151 @@ async function dispatchReminderMessage({
   }
 }
 
+/**
+ * Attempts real email dispatch via configured SMTP (Nodemailer) or Resend HTTP API.
+ */
+async function dispatchEmailMessage({
+  toEmail,
+  toName = 'Student',
+  subject = 'Institute Notification',
+  message = '',
+  fromEmail = '',
+  fromName = '',
+  replyTo = '',
+  instituteName = 'Zacma Technology Institute',
+}) {
+  const toCheck = normalizeEmailAddress(toEmail);
+  if (!toCheck.valid) {
+    return {
+      sent: false,
+      channelStatus: 'FAILED',
+      detail: toCheck.error === 'Email address is missing.' ? 'Student has no email address on file.' : toCheck.error,
+    };
+  }
+
+  const status = getGatewayStatus({
+    emailFromAddress: fromEmail,
+    emailFromName: fromName,
+    instituteName,
+  });
+
+  if (!status.email.configured) {
+    return {
+      sent: false,
+      channelStatus: 'EMAIL_NOT_CONFIGURED',
+      detail: 'Email provider credentials (SMTP_HOST/SMTP_USER/SMTP_PASS or RESEND_API_KEY) are not configured in server environment (.env / Vercel).',
+    };
+  }
+
+  const senderEmail = status.email.fromEmail;
+  if (!senderEmail) {
+    return {
+      sent: false,
+      channelStatus: 'FAILED',
+      detail: 'No sender email address specified in modal, Settings, or SMTP_USER.',
+    };
+  }
+
+  const senderCheck = normalizeEmailAddress(senderEmail);
+  if (!senderCheck.valid) {
+    return {
+      sent: false,
+      channelStatus: 'FAILED',
+      detail: `Invalid sender email: ${senderCheck.error}`,
+    };
+  }
+
+  const safeFromName = (fromName || status.email.fromName || instituteName).replace(/["\r\n]/g, '').trim();
+  const formattedFrom = `${safeFromName} <${senderCheck.normalized}>`;
+  const cleanSubject = String(subject || 'Institute Notification').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+  const cleanText = String(message || '').trim();
+  const htmlBody = `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #0f172a; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+      <div style="background: #0f172a; color: #ffffff; padding: 16px 20px;">
+        <div style="font-size: 16px; font-weight: 700;">${escapeHtml(instituteName)}</div>
+        <div style="font-size: 12px; color: #cbd5e1; margin-top: 2px;">${escapeHtml(cleanSubject)}</div>
+      </div>
+      <div style="padding: 20px; line-height: 1.6; font-size: 14px; white-space: pre-wrap;">${escapeHtml(cleanText)}</div>
+      <div style="padding: 12px 20px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
+        Sent to ${escapeHtml(toName)} &middot; From ${escapeHtml(senderCheck.normalized)}
+      </div>
+    </div>
+  `;
+
+  try {
+    if (status.email.provider === 'resend') {
+      const resendKey = (process.env.RESEND_API_KEY || '').trim();
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: formattedFrom,
+          to: [toCheck.normalized],
+          ...(replyTo || senderCheck.normalized ? { reply_to: replyTo || senderCheck.normalized } : {}),
+          subject: cleanSubject,
+          text: cleanText,
+          html: htmlBody,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        logger.warn('Resend API error', { status: res.status, message: payload.message });
+        return { sent: false, channelStatus: 'FAILED', detail: payload.message || `Resend HTTP ${res.status}` };
+      }
+      return {
+        sent: true,
+        channelStatus: 'SENT',
+        detail: `Sent via Resend from ${senderCheck.normalized}${payload.id ? ` (${payload.id})` : ''}`,
+      };
+    }
+
+    // SMTP via Nodemailer
+    const smtpUrl = (process.env.SMTP_URL || '').trim();
+    const smtpUser = (process.env.SMTP_USER || '').trim();
+    const smtpHost = (process.env.SMTP_HOST || '').trim();
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+    const smtpSecure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || smtpPort === 465;
+
+    const transport = smtpUrl
+      ? nodemailer.createTransport(smtpUrl)
+      : nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          auth: {
+            user: smtpUser,
+            pass: (process.env.SMTP_PASS || '').trim(),
+          },
+        });
+
+    // If SMTP server authenticates as smtpUser, use senderCheck as replyTo & requested from (with smtpUser fallback if relay rejects alias)
+    const info = await transport.sendMail({
+      from: formattedFrom,
+      to: toCheck.normalized,
+      replyTo: replyTo || senderCheck.normalized,
+      subject: cleanSubject,
+      text: cleanText,
+      html: htmlBody,
+    });
+
+    return {
+      sent: true,
+      channelStatus: 'SENT',
+      detail: `Email sent from ${senderCheck.normalized}${info.messageId ? ` (${info.messageId})` : ''}`,
+    };
+  } catch (err) {
+    logger.error('Email dispatch failed', { provider: status.email.provider, error: err.message });
+    return { sent: false, channelStatus: 'FAILED', detail: err.message };
+  }
+}
+
 module.exports = {
   normalizePhoneForProvider,
+  normalizeEmailAddress,
   getGatewayStatus,
   dispatchReminderMessage,
+  dispatchEmailMessage,
 };

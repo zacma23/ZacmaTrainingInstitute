@@ -14,8 +14,20 @@ const AppState = {
   cloudPayments: [],
   chatHistory: [],
   chatBusy: false,
+  messagingSettings: null,
 };
 window.AppState = AppState;
+
+function paginateTable(opts) {
+  if (window.BirrPagination) {
+    window.BirrPagination.render(opts);
+    return;
+  }
+  const tbody = document.getElementById(opts.tableId);
+  if (!tbody) return;
+  const items = opts.items || [];
+  tbody.innerHTML = items.length === 0 ? opts.emptyHtml : items.map(opts.renderRow).join('');
+}
 
 const PAGE_TITLES = {
   dashboard: 'Administrator Dashboard',
@@ -825,15 +837,12 @@ async function loadStudents() {
     const students = await apiJson(`/api/students?${params.toString()}`);
     AppState.students = students;
 
-    const tbody = document.getElementById('studentsTableBody');
-    if (students.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="12" class="empty-state-box">No students match your current filter criteria.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = students
-      .map(
-        (s) => `
+    paginateTable({
+      tableId: 'studentsTableBody',
+      items: students,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="12" class="empty-state-box">No students match your current filter criteria.</td></tr>',
+      renderRow: (s) => `
       <tr>
         <td class="mono">${esc(s.studentCode)}</td>
         <td><strong>${esc(s.fullName)}</strong></td>
@@ -868,9 +877,8 @@ async function loadStudents() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1133,7 +1141,7 @@ async function viewStudentProfile(id) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <h4 style="font-size:14px;">Installment Schedule</h4>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          ${isAdmin ? `<button type="button" class="btn btn-secondary btn-xs" onclick="closeModal('profileModal'); openSendStudentMessageModal({ targetMode: 'single', studentId: '${s.id}' })">Send Message</button>` : ''}
+          ${isAdmin ? `<button type="button" class="btn btn-secondary btn-xs" onclick="closeModal('profileModal'); openSendStudentMessageModal({ targetMode: 'single', studentId: '${s.id}' })">Message / Email</button>` : ''}
           ${isAdmin ? `<button type="button" class="btn btn-secondary btn-xs" onclick="closeModal('profileModal'); openEditStudent('${s.id}')">Edit Student</button>` : ''}
           ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteStudent('${s.id}', '${esc(s.fullName)}', '${esc(s.studentCode)}')">Delete Student</button>` : ''}
           ${isAdmin && s.enrollmentId ? `<button type="button" class="btn btn-secondary btn-xs" onclick="openAdjustInstallments('${s.id}')">Adjust Schedule</button>` : ''}
@@ -1260,16 +1268,12 @@ async function loadRegistrationApprovals() {
     if (search) params.set('search', search);
 
     const apps = await apiJson(`/api/applications?${params.toString()}`);
-    const tbody = document.getElementById('regApprovalsTableBody');
-
-    if (apps.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state-box">No registration applications in this queue.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = apps
-      .map(
-        (a) => `
+    paginateTable({
+      tableId: 'regApprovalsTableBody',
+      items: apps,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="10" class="empty-state-box">No registration applications in this queue.</td></tr>',
+      renderRow: (a) => `
       <tr>
         <td class="mono">${esc(a.applicationNumber)}</td>
         <td>
@@ -1298,9 +1302,8 @@ async function loadRegistrationApprovals() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
     refreshRoleBadges();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1488,11 +1491,12 @@ async function loadCourses() {
     const courses = await apiJson('/api/courses');
     AppState.courses = courses;
     const isAdmin = AppState.user?.role === 'admin';
-    const tbody = document.getElementById('coursesTableBody');
 
-    tbody.innerHTML = courses
-      .map(
-        (c) => `
+    paginateTable({
+      tableId: 'coursesTableBody',
+      items: courses,
+      emptyHtml: '<tr><td colspan="9" class="empty-state-box">No courses configured yet.</td></tr>',
+      renderRow: (c) => `
       <tr>
         <td class="mono">${esc(c.code)}</td>
         <td>
@@ -1513,9 +1517,8 @@ async function loadCourses() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1684,16 +1687,13 @@ async function loadFeeLedger() {
     if (status) params.set('paymentStatus', status);
 
     const students = await apiJson(`/api/students?${params.toString()}`);
-    const tbody = document.getElementById('feeLedgerBody');
 
-    if (students.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state-box">No student fee records found.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = students
-      .map(
-        (s) => `
+    paginateTable({
+      tableId: 'feeLedgerBody',
+      items: students,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="10" class="empty-state-box">No student fee records found.</td></tr>',
+      renderRow: (s) => `
       <tr>
         <td class="mono">${esc(s.studentCode)}</td>
         <td><strong>${esc(s.fullName)}</strong></td>
@@ -1712,9 +1712,8 @@ async function loadFeeLedger() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -1821,16 +1820,13 @@ async function loadPaymentApprovals() {
     if (search) params.set('search', search);
 
     const subs = await apiJson(`/api/payment-submissions?${params.toString()}`);
-    const tbody = document.getElementById('payApprovalsTableBody');
 
-    if (subs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty-state-box">No payment submissions in this queue.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = subs
-      .map(
-        (p) => `
+    paginateTable({
+      tableId: 'payApprovalsTableBody',
+      items: subs,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="9" class="empty-state-box">No payment submissions in this queue.</td></tr>',
+      renderRow: (p) => `
       <tr>
         <td class="mono">${esc(p.submissionRef)}</td>
         <td>
@@ -1865,9 +1861,8 @@ async function loadPaymentApprovals() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
     refreshRoleBadges();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1962,6 +1957,7 @@ function renderFilteredStudentSelect(selectId, students, term, keepValue = undef
           (s.fullName || '').toLowerCase().includes(q) ||
           (s.studentCode || '').toLowerCase().includes(q) ||
           (s.phone || '').toLowerCase().includes(q) ||
+          (s.email || '').toLowerCase().includes(q) ||
           (s.id || '').toLowerCase().includes(q)
       )
     : list;
@@ -1973,9 +1969,10 @@ function renderFilteredStudentSelect(selectId, students, term, keepValue = undef
   sel.innerHTML =
     `<option value="">${filtered.length === 0 ? 'No matching students found...' : 'Choose a student...'}</option>` +
     filtered
-      .map(
-        (s) =>
-          `<option value="${s.id}">${esc(s.fullName)} (${esc(s.studentCode)}) — Bal: ${fmtETB(s.remainingBalance)}</option>`
+      .map((s) =>
+        selectId === 'msgStudentSelect'
+          ? `<option value="${s.id}">${esc(s.fullName)} (${esc(s.studentCode)}) — ${esc(s.phone || 'No phone')}${s.email ? ` · ${esc(s.email)}` : ''}</option>`
+          : `<option value="${s.id}">${esc(s.fullName)} (${esc(s.studentCode)}) — Bal: ${fmtETB(s.remainingBalance)}</option>`
       )
       .join('');
 
@@ -2158,15 +2155,12 @@ async function fetchAndRenderTransactions() {
     document.getElementById('txnSummaryCount').textContent = txns.length;
     document.getElementById('txnSummaryTotal').textContent = fmtETB(total);
 
-    const tbody = document.getElementById('transactionsTableBody');
-    if (txns.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state-box">No transactions found matching filters.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = txns
-      .map(
-        (t) => `
+    paginateTable({
+      tableId: 'transactionsTableBody',
+      items: txns,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="10" class="empty-state-box">No transactions found matching filters.</td></tr>',
+      renderRow: (t) => `
       <tr>
         <td class="mono">${esc(t.transactionId)}</td>
         <td class="mono">${esc(t.receiptNumber || '—')}</td>
@@ -2184,9 +2178,8 @@ async function fetchAndRenderTransactions() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2252,16 +2245,13 @@ async function loadReceiptsView() {
     if (end) params.set('endDate', end);
 
     const receipts = await apiJson(`/api/receipts?${params.toString()}`);
-    const tbody = document.getElementById('receiptsTableBody');
 
-    if (receipts.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty-state-box">No official receipts match your search criteria.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = receipts
-      .map(
-        (r) => `
+    paginateTable({
+      tableId: 'receiptsTableBody',
+      items: receipts,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="10" class="empty-state-box">No official receipts match your search criteria.</td></tr>',
+      renderRow: (r) => `
       <tr>
         <td class="mono"><strong>${esc(r.receiptNumber)}</strong></td>
         <td class="mono">${esc(r.txnCode)}</td>
@@ -2274,9 +2264,8 @@ async function loadReceiptsView() {
         <td>${esc(r.issuedBy)}</td>
         <td><button type="button" class="btn btn-primary btn-xs" onclick="openReceiptModal('${r.transactionId}')">View / PDF</button></td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2304,15 +2293,13 @@ async function loadInstallmentsView() {
     if (courseId) params.set('courseId', courseId);
 
     const items = await apiJson(`/api/installments?${params.toString()}`);
-    const tbody = document.getElementById('installmentsTableBody');
-    if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="11" class="empty-state-box">No installments match the selected filter.</td></tr>';
-      return;
-    }
 
-    tbody.innerHTML = items
-      .map(
-        (i) => `
+    paginateTable({
+      tableId: 'installmentsTableBody',
+      items,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="11" class="empty-state-box">No installments match the selected filter.</td></tr>',
+      renderRow: (i) => `
       <tr>
         <td><strong>${esc(i.studentName)}</strong><br/><span class="mono" style="font-size:11.5px; color:var(--text-muted);">${esc(i.studentCode)}</span></td>
         <td class="mono">${esc(i.phone)}</td>
@@ -2332,9 +2319,8 @@ async function loadInstallmentsView() {
           }
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2416,13 +2402,12 @@ async function loadAttendanceReport() {
 
     const data = await apiJson(`/api/attendance/report?${params.toString()}`);
 
-    const sumBody = document.getElementById('attSummaryBody');
-    sumBody.innerHTML =
-      data.studentsSummary.length === 0
-        ? '<tr><td colspan="9" class="empty-state-box">No attendance records recorded for this period.</td></tr>'
-        : data.studentsSummary
-            .map(
-              (s) => `
+    paginateTable({
+      tableId: 'attSummaryBody',
+      items: data.studentsSummary || [],
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="9" class="empty-state-box">No attendance records recorded for this period.</td></tr>',
+      renderRow: (s) => `
           <tr>
             <td class="mono">${esc(s.studentCode)}</td>
             <td><strong>${esc(s.studentName)}</strong></td>
@@ -2434,17 +2419,15 @@ async function loadAttendanceReport() {
             <td class="num txt-overdue">${s.daysAbsent}</td>
             <td class="num"><strong>${s.attendancePercentage}%</strong></td>
           </tr>
-        `
-            )
-            .join('');
+        `,
+    });
 
-    const histBody = document.getElementById('attHistoryBody');
-    histBody.innerHTML =
-      data.history.length === 0
-        ? '<tr><td colspan="7" class="empty-state-box">No attendance log entries found.</td></tr>'
-        : data.history
-            .map(
-              (h) => `
+    paginateTable({
+      tableId: 'attHistoryBody',
+      items: data.history || [],
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="7" class="empty-state-box">No attendance log entries found.</td></tr>',
+      renderRow: (h) => `
           <tr>
             <td class="mono">${fmtDate(h.attendanceDate)}</td>
             <td><strong>${esc(h.studentName)}</strong> <span class="mono" style="font-size:11.5px; color:var(--text-muted);">${esc(h.studentCode)}</span></td>
@@ -2454,9 +2437,8 @@ async function loadAttendanceReport() {
             <td>${esc(h.recordedByName || '—')}</td>
             <td><button type="button" class="btn btn-danger btn-xs" onclick="deleteAttendanceRecord('${h.id}')">Delete</button></td>
           </tr>
-        `
-            )
-            .join('');
+        `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2580,24 +2562,23 @@ async function loadNotificationsView() {
     banner.innerHTML = `
       <strong>Notification Channels:</strong>
       In-App Workflow &amp; Payment Alerts Active &middot;
-      SMS / Phone Provider: ${esc(data.gateway.sms.statusMessage)} &middot;
-      WhatsApp: ${esc(data.gateway.whatsapp.statusMessage)}
+      SMS / Phone Provider: ${esc(data.gateway.sms?.statusMessage || 'Not configured')} &middot;
+      Email Provider: ${esc(data.gateway.email?.statusMessage || 'Not configured')} &middot;
+      WhatsApp: ${esc(data.gateway.whatsapp?.statusMessage || 'Not configured')}
     `;
 
     refreshRoleBadges();
 
-    const tbody = document.getElementById('notificationsTableBody');
     notificationCacheMap.clear();
-    if (data.notifications.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty-state-box">No notifications in this view.</td></tr>';
-      return;
-    }
+    (data.notifications || []).forEach((n) => notificationCacheMap.set(n.id, n));
 
     const isAdmin = AppState.user?.role === 'admin';
-    tbody.innerHTML = data.notifications
-      .map((n) => {
-        notificationCacheMap.set(n.id, n);
-        return `
+    paginateTable({
+      tableId: 'notificationsTableBody',
+      items: data.notifications || [],
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="8" class="empty-state-box">No notifications in this view.</td></tr>',
+      renderRow: (n) => `
       <tr>
         <td><span class="status-tag ${n.type.includes('REJECT') || n.type === 'OVERDUE' ? 'status-danger' : n.type.includes('APPROVED') || n.type === 'STUDENT_MESSAGE' ? 'status-paid' : 'status-partial'}">${esc(n.type.replace(/_/g, ' '))}</span></td>
         <td>
@@ -2612,15 +2593,14 @@ async function loadNotificationsView() {
         <td>
           <div class="row-actions">
             ${!n.isRead ? `<button type="button" class="btn btn-secondary btn-xs" onclick="markNotificationRead('${n.id}')">Mark Read</button>` : ''}
-            ${isAdmin && n.studentId && n.phone ? `<button type="button" class="btn btn-primary btn-xs" onclick="sendSmsFromNotification('${n.id}')">Send SMS</button>` : ''}
+            ${isAdmin && n.studentId && (n.phone || n.email) ? `<button type="button" class="btn btn-primary btn-xs" onclick="sendSmsFromNotification('${n.id}')">Message / Email</button>` : ''}
             ${n.studentId ? `<button type="button" class="btn btn-secondary btn-xs" onclick="viewStudentProfile('${n.studentId}')">Student</button>` : ''}
             ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" onclick="deleteNotification('${n.id}')">Delete</button>` : ''}
           </div>
         </td>
       </tr>
-    `;
-      })
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2718,15 +2698,13 @@ async function generateReport() {
     document.getElementById('reportTableHead').innerHTML =
       `<tr>${data.columns.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>`;
 
-    const tbody = document.getElementById('reportTableBody');
-    if (data.rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="${data.columns.length}" class="empty-state-box">No records found for this report period.</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = data.rows
-      .map((row) => `<tr>${row.map((cell) => `<td>${esc(cell)}</td>`).join('')}</tr>`)
-      .join('');
+    paginateTable({
+      tableId: 'reportTableBody',
+      items: data.rows || [],
+      filterKey: `${type}:${qs}`,
+      emptyHtml: `<tr><td colspan="${data.columns.length}" class="empty-state-box">No records found for this report period.</td></tr>`,
+      renderRow: (row) => `<tr>${row.map((cell) => `<td>${esc(cell)}</td>`).join('')}</tr>`,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2752,9 +2730,11 @@ document.getElementById('downloadReportXlsxBtn').addEventListener('click', async
 async function loadUsersView() {
   try {
     const users = await apiJson('/api/admin/users');
-    document.getElementById('usersTableBody').innerHTML = users
-      .map(
-        (u) => `
+    paginateTable({
+      tableId: 'usersTableBody',
+      items: users,
+      emptyHtml: '<tr><td colspan="8" class="empty-state-box">No staff accounts found.</td></tr>',
+      renderRow: (u) => `
       <tr>
         <td class="mono">${esc(u.username)}</td>
         <td><strong>${esc(u.fullName)}</strong></td>
@@ -2779,9 +2759,8 @@ async function loadUsersView() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2881,20 +2860,17 @@ async function loadAuditLogsView() {
   try {
     const search = document.getElementById('auditSearchInput').value.trim();
     const userRole = document.getElementById('auditRoleFilter').value;
-    const params = new URLSearchParams({ limit: '100' });
+    const params = new URLSearchParams({ limit: '500' });
     if (search) params.set('search', search);
     if (userRole) params.set('userRole', userRole);
 
     const logs = await apiJson(`/api/admin/audit-logs?${params.toString()}`);
-    const tbody = document.getElementById('auditLogsTableBody');
-    if (logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-state-box">No audit log entries match your filter.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = logs
-      .map(
-        (l) => `
+    paginateTable({
+      tableId: 'auditLogsTableBody',
+      items: logs,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="7" class="empty-state-box">No audit log entries match your filter.</td></tr>',
+      renderRow: (l) => `
       <tr>
         <td class="mono">${String(l.createdAt).slice(0, 19).replace('T', ' ')}</td>
         <td class="mono">${esc(l.username)}</td>
@@ -2907,9 +2883,8 @@ async function loadAuditLogsView() {
         </td>
         <td style="font-size:12px; max-width:260px;">${esc(l.reason || (typeof l.details === 'string' ? l.details : JSON.stringify(l.details || {})))}</td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -2924,6 +2899,8 @@ async function loadSettingsView() {
   try {
     const data = await apiJson('/api/settings');
     const s = data.settings;
+    AppState.messagingSettings = s;
+    AppState.gateway = data.gateway;
     document.getElementById('setInstituteName').value = s.instituteName || '';
     document.getElementById('setInstituteShort').value = s.instituteShortName || '';
     document.getElementById('setInstitutePhone').value = s.institutePhone || '';
@@ -2934,6 +2911,10 @@ async function loadSettingsView() {
     document.getElementById('setAddress').value = s.instituteAddress || '';
     document.getElementById('setSmsFromNumber').value = s.smsFromNumber || '';
     document.getElementById('setSmsSenderId').value = s.smsSenderId || '';
+    const emailFromEl = document.getElementById('setEmailFromAddress');
+    if (emailFromEl) emailFromEl.value = s.emailFromAddress || '';
+    const emailNameEl = document.getElementById('setEmailFromName');
+    if (emailNameEl) emailNameEl.value = s.emailFromName || '';
     document.getElementById('setReceiptFooter').value = s.receiptFooterNote || '';
 
     document.getElementById('settingsSystemInfo').innerHTML = `
@@ -2941,6 +2922,7 @@ async function loadSettingsView() {
       <div class="kv-item"><span>Database Name</span><strong class="mono">${esc(data.database.database || 'sfmt_ethiopia')}</strong></div>
       <div class="kv-item"><span>Currency &amp; Timezone</span><strong class="mono">${esc(s.currency || 'ETB')} &middot; ${esc(s.timezone || 'Africa/Addis_Ababa')}</strong></div>
       <div class="kv-item"><span>Phone / SMS Gateway</span><strong>${esc(data.gateway.sms.statusMessage)}</strong></div>
+      <div class="kv-item"><span>Email Gateway (SMTP / Resend)</span><strong>${esc(data.gateway.email?.statusMessage || 'Not configured')}</strong></div>
       <div class="kv-item"><span>WhatsApp Gateway</span><strong>${esc(data.gateway.whatsapp.statusMessage)}</strong></div>
       <div class="form-divider"></div>
       <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
@@ -2951,7 +2933,7 @@ async function loadSettingsView() {
         <button type="button" id="runLegacyMigrateBtn" class="btn btn-secondary btn-sm">Import Legacy Data</button>
       </div>
       <p style="font-size:12.5px; color:var(--text-muted); margin:6px 0 0;">
-        To dispatch live messages from your phone number provider, set <code>SMS_PROVIDER</code> (<code>twilio</code>, <code>africastalking</code>, <code>afromessage</code>, or <code>custom</code>) and its API token/SID in server environment variables (<code>.env</code> or Vercel Environment Variables), and enter your sender phone number on the left.
+        Configure live SMS via <code>SMS_PROVIDER</code> (<code>twilio</code>, <code>africastalking</code>, <code>afromessage</code>, or <code>custom</code>) or live Email via <code>SMTP_HOST</code>/<code>SMTP_USER</code>/<code>SMTP_PASS</code>, <code>SMTP_URL</code>, or <code>RESEND_API_KEY</code> in server environment variables (<code>.env</code> or Vercel), and enter your default sender phone/email on the left.
       </p>
     `;
     document.getElementById('runLegacyMigrateBtn').addEventListener('click', async () => {
@@ -2984,6 +2966,8 @@ document.getElementById('settingsForm').addEventListener('submit', async (e) => 
         instituteAddress: document.getElementById('setAddress').value,
         smsFromNumber: document.getElementById('setSmsFromNumber').value,
         smsSenderId: document.getElementById('setSmsSenderId').value,
+        emailFromAddress: document.getElementById('setEmailFromAddress')?.value || '',
+        emailFromName: document.getElementById('setEmailFromName')?.value || '',
         receiptFooterNote: document.getElementById('setReceiptFooter').value,
       }),
     });
@@ -3267,15 +3251,12 @@ async function loadAccountantStudentsView() {
     if (paymentStatus) params.set('paymentStatus', paymentStatus);
 
     const students = await apiJson(`/api/students?${params.toString()}`);
-    const tbody = document.getElementById('accStudentsTableBody');
-    if (students.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty-state-box">No approved students match your search criteria.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = students
-      .map(
-        (s) => `
+    paginateTable({
+      tableId: 'accStudentsTableBody',
+      items: students,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="9" class="empty-state-box">No approved students match your search criteria.</td></tr>',
+      renderRow: (s) => `
       <tr>
         <td class="mono">${esc(s.studentCode)}</td>
         <td><strong>${esc(s.fullName)}</strong></td>
@@ -3296,9 +3277,8 @@ async function loadAccountantStudentsView() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -3454,16 +3434,12 @@ async function loadAccountantRegistrationsView() {
     if (status) params.set('status', status);
 
     const apps = await apiJson(`/api/applications?${params.toString()}`);
-    const tbody = document.getElementById('accRegHistBody');
-
-    if (apps.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" class="empty-state-box">No registration submissions found.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = apps
-      .map(
-        (a) => `
+    paginateTable({
+      tableId: 'accRegHistBody',
+      items: apps,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="8" class="empty-state-box">No registration submissions found.</td></tr>',
+      renderRow: (a) => `
       <tr>
         <td class="mono">${esc(a.applicationNumber)}</td>
         <td>
@@ -3488,9 +3464,8 @@ async function loadAccountantRegistrationsView() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -3509,16 +3484,12 @@ async function loadAccountantPaymentsView() {
     if (status) params.set('status', status);
 
     const subs = await apiJson(`/api/payment-submissions?${params.toString()}`);
-    const tbody = document.getElementById('accPayHistBody');
-
-    if (subs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty-state-box">No payment submissions found.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = subs
-      .map(
-        (p) => `
+    paginateTable({
+      tableId: 'accPayHistBody',
+      items: subs,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="9" class="empty-state-box">No payment submissions found.</td></tr>',
+      renderRow: (p) => `
       <tr>
         <td class="mono">${esc(p.submissionRef)}</td>
         <td><strong>${esc(p.studentName)}</strong><br/><span class="mono" style="font-size:11.5px; color:var(--text-muted);">${esc(p.studentCode)}</span></td>
@@ -3540,9 +3511,8 @@ async function loadAccountantPaymentsView() {
           <button type="button" class="btn btn-secondary btn-xs" onclick="openSubmissionConfirmationModal('payment', '${p.id}')">Confirmation</button>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -3656,17 +3626,14 @@ async function runGlobalStudentLookup() {
     if (studentName) params.set('studentName', studentName);
     if (studentId) params.set('studentId', studentId);
     const students = await apiJson(`/api/students?${params.toString()}`);
-
-    if (students.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-state-box">No students found matching that name or Student ID.</td></tr>';
-      return;
-    }
-
     const isAdmin = AppState.user && AppState.user.role === 'admin';
-    tbody.innerHTML = students
-      .slice(0, 25)
-      .map(
-        (s) => `
+
+    paginateTable({
+      tableId: 'lookupResultsBody',
+      items: students,
+      filterKey: params.toString(),
+      emptyHtml: '<tr><td colspan="7" class="empty-state-box">No students found matching that name or Student ID.</td></tr>',
+      renderRow: (s) => `
       <tr>
         <td class="mono">${esc(s.studentCode)}</td>
         <td><strong>${esc(s.fullName)}</strong></td>
@@ -3690,9 +3657,8 @@ async function runGlobalStudentLookup() {
           </div>
         </td>
       </tr>
-    `
-      )
-      .join('');
+    `,
+    });
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty-state-box">${esc(err.message)}</td></tr>`;
   }
@@ -3711,7 +3677,7 @@ document.getElementById('quickStudentLookupBtn')?.addEventListener('click', () =
 document.getElementById('lookupStudentNameInput')?.addEventListener('input', runGlobalStudentLookup);
 document.getElementById('lookupStudentIdInput')?.addEventListener('input', runGlobalStudentLookup);
 
-// ================= ADMIN: SEND MESSAGE VIA PHONE NUMBER PROVIDER =================
+// ================= ADMIN: SEND MESSAGE / EMAIL VIA PHONE OR EMAIL PROVIDER =================
 let activeSourceNotificationId = '';
 
 function updateSendMsgAudienceVisibility() {
@@ -3720,6 +3686,69 @@ function updateSendMsgAudienceVisibility() {
   const courseWrap = document.getElementById('msgCourseWrap');
   if (singleWrap) singleWrap.style.display = mode === 'single' ? '' : 'none';
   if (courseWrap) courseWrap.style.display = mode === 'course' ? '' : 'none';
+}
+
+function updateSendMsgChannelVisibility() {
+  const channel = document.getElementById('msgChannel')?.value || 'sms';
+  const phoneWrap = document.getElementById('msgSenderPhoneWrap');
+  const emailWrap = document.getElementById('msgSenderEmailWrap');
+  const subjWrap = document.getElementById('msgEmailSubjectWrap');
+  const subjInput = document.getElementById('msgEmailSubject');
+  const submitBtn = document.getElementById('sendMsgSubmitBtn');
+
+  const needsPhone = channel === 'sms' || channel === 'whatsapp' || channel === 'both';
+  const needsEmail = channel === 'email' || channel === 'both';
+
+  if (phoneWrap) phoneWrap.style.display = needsPhone ? '' : 'none';
+  if (emailWrap) emailWrap.style.display = needsEmail ? '' : 'none';
+  if (subjWrap) subjWrap.style.display = needsEmail ? '' : 'none';
+  if (subjInput) subjInput.required = needsEmail;
+
+  if (submitBtn) {
+    const labelEl = submitBtn.querySelector('span');
+    if (labelEl) {
+      labelEl.textContent =
+        channel === 'email'
+          ? 'Send Email Now'
+          : channel === 'both'
+            ? 'Send SMS & Email Now'
+            : 'Send Message Now';
+    }
+  }
+}
+
+function applySenderPhonePreset() {
+  const preset = document.getElementById('msgSenderPhonePreset')?.value || 'institute_default';
+  const input = document.getElementById('msgSenderPhone');
+  if (!input) return;
+  const s = AppState.messagingSettings || {};
+  const gw = AppState.gateway || {};
+  if (preset === 'institute_default') {
+    input.value = s.smsFromNumber || gw.sms?.fromNumber || s.institutePhone || '';
+  } else if (preset === 'institute_contact') {
+    input.value = s.institutePhone || '';
+  } else if (preset === 'staff_phone') {
+    input.value = AppState.user?.phone || '';
+  } else if (preset === 'custom') {
+    input.focus();
+  }
+}
+
+function applySenderEmailPreset() {
+  const preset = document.getElementById('msgSenderEmailPreset')?.value || 'institute_default';
+  const input = document.getElementById('msgSenderEmail');
+  if (!input) return;
+  const s = AppState.messagingSettings || {};
+  const gw = AppState.gateway || {};
+  if (preset === 'institute_default') {
+    input.value = s.emailFromAddress || gw.email?.fromEmail || s.instituteEmail || '';
+  } else if (preset === 'institute_contact') {
+    input.value = s.instituteEmail || '';
+  } else if (preset === 'staff_email') {
+    input.value = AppState.user?.email || '';
+  } else if (preset === 'custom') {
+    input.focus();
+  }
 }
 
 function updateSendMsgCharCounter() {
@@ -3741,20 +3770,32 @@ async function openSendStudentMessageModal(opts = {}) {
   }
 
   try {
-    if (!AppState.students || AppState.students.length === 0) {
-      AppState.students = await apiJson('/api/students');
+    const [studentsData, settingsData] = await Promise.all([
+      !AppState.students || AppState.students.length === 0 ? apiJson('/api/students') : Promise.resolve(AppState.students),
+      apiJson('/api/settings').catch(() => null),
+    ]);
+    AppState.students = studentsData;
+    if (settingsData) {
+      AppState.messagingSettings = settingsData.settings || AppState.messagingSettings;
+      AppState.gateway = settingsData.gateway || AppState.gateway;
+    } else {
+      const notifInfo = await apiJson('/api/notifications?filter=unread').catch(() => null);
+      if (notifInfo?.gateway) AppState.gateway = notifInfo.gateway;
     }
-    const notifInfo = await apiJson('/api/notifications?filter=unread');
-    AppState.gateway = notifInfo.gateway;
   } catch {
     // non-blocking
   }
 
-  const gw = AppState.gateway || { sms: { statusMessage: 'Checking...' }, whatsapp: { statusMessage: 'Checking...' } };
+  const gw = AppState.gateway || {
+    sms: { statusMessage: 'Checking...' },
+    email: { statusMessage: 'Checking...' },
+    whatsapp: { statusMessage: 'Checking...' },
+  };
   const banner = document.getElementById('sendMsgGatewayBanner');
   if (banner) {
     banner.innerHTML = `
-      <strong>Phone Provider Status:</strong> ${esc(gw.sms?.statusMessage || 'Not configured')} &middot;
+      <strong>Phone/SMS:</strong> ${esc(gw.sms?.statusMessage || 'Not configured')} &middot;
+      <strong>Email:</strong> ${esc(gw.email?.statusMessage || 'Not configured')} &middot;
       <strong>WhatsApp:</strong> ${esc(gw.whatsapp?.statusMessage || 'Not configured')}
     `;
   }
@@ -3762,6 +3803,18 @@ async function openSendStudentMessageModal(opts = {}) {
   const modeEl = document.getElementById('msgTargetMode');
   if (modeEl) modeEl.value = opts.targetMode || 'single';
   updateSendMsgAudienceVisibility();
+
+  const chEl = document.getElementById('msgChannel');
+  if (chEl && opts.channel) chEl.value = opts.channel;
+  updateSendMsgChannelVisibility();
+
+  const pPresetEl = document.getElementById('msgSenderPhonePreset');
+  if (pPresetEl) pPresetEl.value = 'institute_default';
+  applySenderPhonePreset();
+
+  const ePresetEl = document.getElementById('msgSenderEmailPreset');
+  if (ePresetEl) ePresetEl.value = 'institute_default';
+  applySenderEmailPreset();
 
   const searchEl = document.getElementById('msgStudentSearch');
   if (searchEl) searchEl.value = '';
@@ -3771,7 +3824,10 @@ async function openSendStudentMessageModal(opts = {}) {
   if (tmplEl) tmplEl.value = opts.template || 'custom';
 
   const titleEl = document.getElementById('msgTitleInput');
-  if (titleEl) titleEl.value = opts.title || 'Student Phone Notification';
+  if (titleEl) titleEl.value = opts.title || 'Student Notification';
+
+  const subjEl = document.getElementById('msgEmailSubject');
+  if (subjEl) subjEl.value = opts.subject || opts.title || 'Fee & Enrollment Notice — {instituteName}';
 
   const bodyEl = document.getElementById('msgBodyInput');
   if (bodyEl) {
@@ -3790,7 +3846,9 @@ function sendSmsFromNotification(notifId) {
     targetMode: 'single',
     studentId: n.studentId || '',
     notificationId: n.id,
-    title: n.title || 'Payment Reminder SMS',
+    channel: !n.phone && n.email ? 'email' : 'sms',
+    title: n.title || 'Payment Reminder',
+    subject: n.title || 'Payment Reminder — {instituteName}',
     message: n.message || '',
   });
 }
@@ -3803,6 +3861,17 @@ document.getElementById('openSendStudentMsgBtn')?.addEventListener('click', () =
 });
 
 document.getElementById('msgTargetMode')?.addEventListener('change', updateSendMsgAudienceVisibility);
+document.getElementById('msgChannel')?.addEventListener('change', updateSendMsgChannelVisibility);
+document.getElementById('msgSenderPhonePreset')?.addEventListener('change', applySenderPhonePreset);
+document.getElementById('msgSenderEmailPreset')?.addEventListener('change', applySenderEmailPreset);
+document.getElementById('msgSenderPhone')?.addEventListener('input', () => {
+  const p = document.getElementById('msgSenderPhonePreset');
+  if (p) p.value = 'custom';
+});
+document.getElementById('msgSenderEmail')?.addEventListener('input', () => {
+  const p = document.getElementById('msgSenderEmailPreset');
+  if (p) p.value = 'custom';
+});
 
 document.getElementById('msgStudentSearch')?.addEventListener('input', (e) => {
   renderFilteredStudentSelect('msgStudentSelect', AppState.students || [], e.target.value);
@@ -3814,17 +3883,21 @@ document.getElementById('msgTemplateSelect')?.addEventListener('change', (e) => 
   const val = e.target.value;
   const bodyEl = document.getElementById('msgBodyInput');
   const titleEl = document.getElementById('msgTitleInput');
+  const subjEl = document.getElementById('msgEmailSubject');
   if (!bodyEl) return;
   if (val === 'fee_reminder') {
     if (titleEl) titleEl.value = 'Fee Balance Reminder';
+    if (subjEl) subjEl.value = 'Fee Balance Reminder — {studentCode} ({instituteName})';
     bodyEl.value =
       'Dear {studentName} ({studentCode}), friendly reminder from {instituteName}: your remaining fee balance for {courseName} is {balance}. Please settle at the finance office.';
   } else if (val === 'overdue_notice') {
     if (titleEl) titleEl.value = 'Overdue Installment Notice';
+    if (subjEl) subjEl.value = 'Urgent: Overdue Installment Notice — {studentCode}';
     bodyEl.value =
       'Dear {studentName} ({studentCode}), your {courseName} installment payment of {balance} at {instituteName} is overdue. Please make payment promptly.';
   } else if (val === 'class_update') {
     if (titleEl) titleEl.value = 'Training Schedule Notice';
+    if (subjEl) subjEl.value = 'Training Schedule Notice — {courseName} ({instituteName})';
     bodyEl.value =
       'Dear {studentName} ({studentCode}), important update from {instituteName} regarding your {courseName} class schedule. Please contact administration for details.';
   }
@@ -3843,6 +3916,9 @@ document.getElementById('sendStudentMsgForm')?.addEventListener('submit', async 
   const studentId = document.getElementById('msgStudentSelect').value;
   const courseId = document.getElementById('msgCourseSelect').value;
   const channel = document.getElementById('msgChannel').value;
+  const senderPhone = document.getElementById('msgSenderPhone')?.value.trim() || '';
+  const senderEmail = document.getElementById('msgSenderEmail')?.value.trim() || '';
+  const subject = document.getElementById('msgEmailSubject')?.value.trim() || '';
   const title = document.getElementById('msgTitleInput').value.trim();
   const message = document.getElementById('msgBodyInput').value.trim();
 
@@ -3861,6 +3937,9 @@ document.getElementById('sendStudentMsgForm')?.addEventListener('submit', async 
         studentId,
         courseId,
         channel,
+        senderPhone,
+        senderEmail,
+        subject,
         title,
         message,
         notificationId: targetMode === 'single' ? activeSourceNotificationId : '',
@@ -3874,15 +3953,18 @@ document.getElementById('sendStudentMsgForm')?.addEventListener('submit', async 
       </div>
       <div class="table-scroll" style="max-height:180px; border:1px solid var(--border-hairline); border-radius:var(--radius-md);">
         <table class="data-table">
-          <thead><tr><th>Student</th><th>Phone</th><th>Status</th><th>Detail</th></tr></thead>
+          <thead><tr><th>Student</th><th>Recipient Contact</th><th>Status</th><th>Detail</th></tr></thead>
           <tbody>
             ${(res.results || [])
               .map(
                 (r) => `
               <tr>
                 <td>${esc(r.fullName)} <span class="mono" style="font-size:11px; color:var(--text-muted);">(${esc(r.studentCode)})</span></td>
-                <td class="mono">${esc(r.phone)}</td>
-                <td><span class="status-tag ${r.sent ? 'status-paid' : r.channelStatus.includes('NOT_CONFIGURED') ? 'status-partial' : 'status-danger'}">${esc(r.channelStatus.replace(/_/g, ' '))}</span></td>
+                <td class="mono" style="font-size:12px;">
+                  ${r.phone ? esc(r.phone) : '—'}
+                  ${r.email ? `<br/><span style="color:var(--text-secondary);">${esc(r.email)}</span>` : ''}
+                </td>
+                <td><span class="status-tag ${r.sent ? (r.channelStatus === 'PARTIAL' ? 'status-partial' : 'status-paid') : r.channelStatus.includes('NOT_CONFIGURED') ? 'status-partial' : 'status-danger'}">${esc(r.channelStatus.replace(/_/g, ' '))}</span></td>
                 <td style="font-size:12px;">${esc(r.detail || '')}</td>
               </tr>
             `

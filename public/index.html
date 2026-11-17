@@ -1104,7 +1104,7 @@
               <div class="page-head-actions">
                 <button type="button" id="openSendStudentMsgBtn" class="btn btn-primary btn-sm admin-only">
                   <i data-lucide="send"></i>
-                  <span>Message Students</span>
+                  <span>Message / Email Students</span>
                 </button>
                 <button type="button" id="runReminderCheckBtn" class="btn btn-secondary btn-sm admin-only">
                   <i data-lucide="radar"></i>
@@ -1368,6 +1368,16 @@
                     <div class="form-group">
                       <label for="setSmsSenderId">SMS Sender ID / Label</label>
                       <input type="text" id="setSmsSenderId" placeholder="e.g., ZacmaTech" maxlength="20" />
+                    </div>
+                  </div>
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label for="setEmailFromAddress">Outgoing Sender Email Address (From)</label>
+                      <input type="email" id="setEmailFromAddress" placeholder="e.g., finance@zacmatech.edu.et" />
+                    </div>
+                    <div class="form-group">
+                      <label for="setEmailFromName">Email Sender Display Name</label>
+                      <input type="text" id="setEmailFromName" placeholder="e.g., Zacma Technology Institute" maxlength="80" />
                     </div>
                   </div>
                   <div class="form-group">
@@ -2973,11 +2983,11 @@
       </div>
     </div>
 
-    <!-- MODAL: Send Phone / SMS Message to Students (Admin Only) -->
+    <!-- MODAL: Send Phone / Email Message to Students (Admin Only) -->
     <div id="sendStudentMsgModal" class="modal-overlay">
       <div class="modal modal-lg">
         <div class="modal-header">
-          <h3>Notify Students via Phone Number Provider</h3>
+          <h3>Send Student Message or Email</h3>
           <button type="button" class="icon-btn" onclick="closeModal('sendStudentMsgModal')"><i data-lucide="x"></i></button>
         </div>
         <form id="sendStudentMsgForm" class="modal-body form-stack">
@@ -2998,15 +3008,49 @@
               <label for="msgChannel">Delivery Channel *</label>
               <select id="msgChannel">
                 <option value="sms">SMS (Configured Phone Number Provider)</option>
+                <option value="email">Email (Configured SMTP / Resend)</option>
+                <option value="both">Both SMS &amp; Email</option>
                 <option value="whatsapp">WhatsApp (Configured Gateway)</option>
               </select>
+            </div>
+          </div>
+
+          <div id="msgSenderPhoneWrap" class="form-row-2">
+            <div class="form-group">
+              <label for="msgSenderPhonePreset">Sender Phone Option</label>
+              <select id="msgSenderPhonePreset">
+                <option value="institute_default">Institute Default SMS Number</option>
+                <option value="institute_contact">Institute Official Phone</option>
+                <option value="staff_phone">My Staff Phone Number</option>
+                <option value="custom">Custom Phone Number</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="msgSenderPhone">From Phone Number</label>
+              <input type="text" id="msgSenderPhone" placeholder="e.g., +251911667890" />
+            </div>
+          </div>
+
+          <div id="msgSenderEmailWrap" class="form-row-2" style="display:none;">
+            <div class="form-group">
+              <label for="msgSenderEmailPreset">Sender Email Option</label>
+              <select id="msgSenderEmailPreset">
+                <option value="institute_default">Institute Default Email</option>
+                <option value="institute_contact">Institute Official Email</option>
+                <option value="staff_email">My Staff Email Address</option>
+                <option value="custom">Custom Email Address</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="msgSenderEmail">From Email Address</label>
+              <input type="email" id="msgSenderEmail" placeholder="e.g., finance@zacmatech.edu.et" />
             </div>
           </div>
 
           <div id="msgSingleStudentWrap" class="form-stack">
             <div class="form-row-2">
               <div class="form-group">
-                <label for="msgStudentSearch">Search Student (Name or ID)</label>
+                <label for="msgStudentSearch">Search Student (Name, ID, Phone, or Email)</label>
                 <input type="text" id="msgStudentSearch" placeholder="e.g., Abebe or ZTI-2026-0001..." />
               </div>
               <div class="form-group">
@@ -3035,6 +3079,11 @@
               <label for="msgTitleInput">Log Title</label>
               <input type="text" id="msgTitleInput" value="Student Phone Notification" maxlength="160" />
             </div>
+          </div>
+
+          <div id="msgEmailSubjectWrap" class="form-group" style="display:none;">
+            <label for="msgEmailSubject">Email Subject Line *</label>
+            <input type="text" id="msgEmailSubject" value="Fee &amp; Enrollment Notice — {instituteName}" maxlength="190" />
           </div>
 
           <div class="form-group">
@@ -3100,6 +3149,7 @@
     <script src="/js/api.js"></script>
     <script src="/js/receipt.js"></script>
     <script src="/js/firebase-bundle.js"></script>
+    <script src="/js/pagination.js"></script>
     <script src="/js/ai-tools.js"></script>
     <script src="/app.js"></script>
   </body>
