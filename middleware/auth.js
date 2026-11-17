@@ -81,12 +81,25 @@ function requireRole(...allowedRoles) {
   };
 }
 
+function getClientIp(req) {
+  const forwarded = req && req.headers ? req.headers['x-forwarded-for'] : '';
+  const firstForwarded = Array.isArray(forwarded)
+    ? String(forwarded[0] || '').trim()
+    : typeof forwarded === 'string'
+      ? forwarded.split(',')[0].trim()
+      : '';
+  const raw = (req && req.ip) || firstForwarded || (req && req.socket && req.socket.remoteAddress) || 'unknown';
+  return String(raw).trim().slice(0, 60) || 'unknown';
+}
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 25,
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false, trustProxy: false },
+  validate: false,
+  passOnStoreError: true,
+  keyGenerator: getClientIp,
   message: { error: 'Too many login attempts. Please wait 15 minutes and try again.' },
 });
 
@@ -95,7 +108,9 @@ const apiLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false, trustProxy: false },
+  validate: false,
+  passOnStoreError: true,
+  keyGenerator: getClientIp,
   message: { error: 'Too many requests. Please slow down.' },
 });
 
@@ -120,7 +135,7 @@ async function recordAuditLog(
         newValue !== null && newValue !== undefined ? JSON.stringify(newValue) : null,
         reason ? String(reason).trim() : '',
         JSON.stringify(details || {}),
-        ipAddress || '',
+        String(ipAddress || '').slice(0, 60),
       ]
     );
   } catch (err) {
@@ -133,6 +148,7 @@ module.exports = {
   signToken,
   authenticate,
   requireRole,
+  getClientIp,
   loginLimiter,
   apiLimiter,
   recordAuditLog,

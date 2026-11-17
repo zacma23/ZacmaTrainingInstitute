@@ -138,14 +138,25 @@ app.get('*', (req, res) => {
 });
 
 // Global Error Handler
-app.use((err, req, res, _next) => {
+app.use((err, req, res, next) => {
   logger.error('Unhandled Express error', {
     method: req.method,
     path: req.path,
     error: err.message,
+    code: err.code,
   });
-  res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error.' : err.message,
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({
+    error:
+      status < 500
+        ? err.message
+        : process.env.NODE_ENV === 'production'
+          ? 'Internal server error.'
+          : err.message,
+    code: err.code || 'INTERNAL_ERROR',
   });
 });
 

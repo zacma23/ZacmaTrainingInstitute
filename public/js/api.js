@@ -36,7 +36,18 @@ async function apiRequest(url, options = {}) {
 
 async function apiJson(url, options = {}) {
   const res = await apiRequest(url, options);
-  const data = await res.json().catch(() => ({}));
+  const rawText = await res.text().catch(() => '');
+  let data = {};
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      const cleanSnippet = rawText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+      if (cleanSnippet) {
+        data = { detail: cleanSnippet };
+      }
+    }
+  }
   if (!res.ok) {
     const err = new Error(data.error || `Request failed (${res.status})`);
     err.status = res.status;

@@ -1,7 +1,7 @@
 const { app, ensureInitialized } = require('../server');
 
 function sanitizeDbError(err) {
-  const msg = String((err && err.message) || 'Unknown database connection error');
+  const msg = String((err && err.message) || 'Unknown error');
   return msg
     .replace(/(mysql|mariadb):\/\/[^@/\s]+@/gi, '$1://***:***@')
     .replace(/(password|pwd)=([^&\s;]+)/gi, '$1=***');
@@ -17,9 +17,8 @@ function normalizeVercelUrl(req) {
 
   if (rewrittenPath !== null) {
     params.delete('__path');
-    const cleanTargetPath = pathOnly.startsWith('/api/index')
-      ? `/api/${String(rewrittenPath).replace(/^\/+/, '')}`.replace(/\/+$/, '') || '/api'
-      : pathOnly;
+    const cleanSubPath = String(rewrittenPath).replace(/^\/+/, '');
+    const cleanTargetPath = cleanSubPath ? `/api/${cleanSubPath}`.replace(/\/+$/, '') : '/api';
     const qs = params.toString();
     req.url = qs ? `${cleanTargetPath}?${qs}` : cleanTargetPath;
     return;
@@ -31,8 +30,58 @@ function normalizeVercelUrl(req) {
   }
 }
 
+function dispatchExpress(req, res) {
+  return new Promise((resolve, reject) => {
+    if (res.writableEnded) {
+      resolve();
+      return;
+    }
+
+    let settled = false;
+    const cleanup = () => {
+      res.removeListener('finish', onDone);
+      res.removeListener('close', onDone);
+      res.removeListener('error', onError);
+    };
+    const onDone = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const onError = (err) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+
+    res.once('finish', onDone);
+    res.once('close', onDone);
+    res.once('error', onError);
+
+    try {
+      app(req, res, (err) => {
+        if (err) {
+          onError(err);
+        } else {
+          onDone();
+        }
+      });
+    } catch (syncErr) {
+      onError(syncErr);
+    }
+  });
+}
+
 module.exports = async (req, res) => {
   normalizeVercelUrl(req);
+
+  // If the serverless runtime already consumed the request stream into req.body,
+  // prevent body-parser from hanging or failing while reading an ended stream.
+  if (req.readableEnded && req._body === undefined && req.body !== undefined) {
+    req._body = true;
+  }
 
   try {
     await ensureInitialized();
@@ -51,5 +100,20 @@ module.exports = async (req, res) => {
     }
   }
 
-  return app(req, res);
+  try {
+    await dispatchExpress(req, res);
+  } catch (err) {
+    console.error('Vercel Express dispatch failed:', err);
+    if (!res.headersSent && !res.writableEnded) {
+      res.statusCode = (err && (err.status || err.statusCode)) || 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.end(
+        JSON.stringify({
+          error: 'Server request failed.',
+          code: (err && err.code) || 'SERVER_DISPATCH_ERROR',
+          detail: sanitizeDbError(err),
+        })
+      );
+    }
+  }
 };

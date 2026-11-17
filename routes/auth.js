@@ -42,17 +42,21 @@ router.post('/setup-admin', loginLimiter, async (req, res) => {
     const passwordHash = await bcrypt.hash(String(password), rounds);
     const userId = randomUUID();
     const cleanUsername = String(username).trim().toLowerCase();
+    const cleanEmail = email ? String(email).trim().toLowerCase() : null;
+    const [roleRows] = await pool.query('SELECT id FROM roles WHERE code = ? LIMIT 1', ['admin']);
+    const roleId = roleRows.length > 0 ? roleRows[0].id : null;
 
     await pool.query(
-      `INSERT INTO users (id, username, fullName, email, phone, passwordHash, role, isActive)
-       VALUES (?, ?, ?, ?, ?, ?, 'admin', 1)`,
+      `INSERT INTO users (id, username, fullName, email, phone, passwordHash, role, roleId, isActive)
+       VALUES (?, ?, ?, ?, ?, ?, 'admin', ?, 1)`,
       [
         userId,
         cleanUsername,
         String(fullName).trim(),
-        email ? String(email).trim() : null,
+        cleanEmail,
         phone ? String(phone).trim() : '',
         passwordHash,
+        roleId,
       ]
     );
 
@@ -69,7 +73,7 @@ router.post('/setup-admin', loginLimiter, async (req, res) => {
 
     res.status(201).json({ token, user });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Administrator setup failed.' });
   }
 });
 
@@ -94,6 +98,10 @@ router.post('/login', loginLimiter, async (req, res) => {
     const user = rows[0];
     if (!user.isActive) {
       return res.status(403).json({ error: 'Account is deactivated. Contact an administrator.' });
+    }
+
+    if (!user.passwordHash || typeof user.passwordHash !== 'string') {
+      return res.status(401).json({ error: 'Invalid username or password.' });
     }
 
     const valid = await bcrypt.compare(String(password), user.passwordHash);
@@ -153,7 +161,7 @@ router.post('/change-password', authenticate, async (req, res) => {
     const [rows] = await pool.query('SELECT passwordHash FROM users WHERE id = ? LIMIT 1', [req.user.id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
 
-    const match = await bcrypt.compare(String(currentPassword), rows[0].passwordHash);
+    const match = await bcrypt.compare(String(currentPassword), rows[0].passwordHash || '');
     if (!match) return res.status(401).json({ error: 'Current password is incorrect.' });
 
     const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
@@ -184,7 +192,13 @@ router.post('/google', loginLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Firebase ID token is required.' });
     }
 
-    const decoded = await verifyFirebaseIdToken(idToken);
+    let decoded;
+    try {
+      decoded = await verifyFirebaseIdToken(idToken);
+    } catch (verifyErr) {
+      return res.status(401).json({ error: verifyErr.message || 'Invalid or expired Google sign-in token.' });
+    }
+
     if (!decoded.email || decoded.email_verified !== true) {
       return res.status(403).json({ error: 'A verified Google email address is required.' });
     }
@@ -266,7 +280,7 @@ router.post('/google', loginLimiter, async (req, res) => {
     if (err.code === 'JWT_CONFIG_ERROR') {
       return res.status(500).json({ error: err.message });
     }
-    res.status(401).json({ error: err.message || 'Google authentication failed.' });
+    res.status(500).json({ error: 'Google sign-in failed.', detail: err.message });
   }
 });
 
