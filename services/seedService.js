@@ -148,7 +148,7 @@ async function ensureBaselineCatalog() {
   ];
   for (const r of defaultRoles) {
     await pool.query(
-      'INSERT IGNORE INTO roles (id, code, name, description) VALUES (?, ?, ?, ?)',
+      'INSERT INTO roles (id, code, name, description) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
       [randomUUID(), r.code, r.name, r.description]
     );
   }
@@ -158,7 +158,7 @@ async function ensureBaselineCatalog() {
   // 1. Ensure default settings & upgrade legacy default institute branding
   for (const [key, val] of Object.entries(DEFAULT_SETTINGS)) {
     await pool.query(
-      'INSERT IGNORE INTO settings (settingKey, settingValue, updatedBy) VALUES (?, ?, ?)',
+      'INSERT INTO settings (settingKey, settingValue, updatedBy) VALUES (?, ?, ?) ON CONFLICT DO NOTHING',
       [key, val, 'system']
     );
   }
@@ -175,8 +175,8 @@ async function ensureBaselineCatalog() {
   // 2. Ensure default payment plans
   for (const plan of DEFAULT_PAYMENT_PLANS) {
     await pool.query(
-      `INSERT IGNORE INTO payment_plans (id, code, name, installmentCount, intervalDays, description, isActive)
-       VALUES (?, ?, ?, ?, ?, ?, 1)`,
+      `INSERT INTO payment_plans (id, code, name, installmentCount, intervalDays, description, isActive)
+       VALUES (?, ?, ?, ?, ?, ?, 1) ON CONFLICT DO NOTHING`,
       [randomUUID(), plan.code, plan.name, plan.installmentCount, plan.intervalDays, plan.description]
     );
   }
@@ -234,8 +234,8 @@ async function ensureBaselineCatalog() {
       const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10', 10);
       const passwordHash = await bcrypt.hash(accPass, rounds);
       await pool.query(
-        `INSERT IGNORE INTO users (id, username, fullName, email, phone, passwordHash, role, roleId, isActive)
-         VALUES (?, ?, ?, ?, ?, ?, 'accountant', ?, 1)`,
+        `INSERT INTO users (id, username, fullName, email, phone, passwordHash, role, roleId, isActive)
+         VALUES (?, ?, ?, ?, ?, ?, 'accountant', ?, 1) ON CONFLICT DO NOTHING`,
         [randomUUID(), accUser, accName, 'accountant@zacmatech.edu.et', '+251911000002', passwordHash, roleIdByCode.accountant || null]
       );
       logger.info('Bootstrapped initial accountant account from environment config', { username: accUser });

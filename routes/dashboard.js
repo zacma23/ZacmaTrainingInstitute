@@ -104,7 +104,7 @@ router.get('/stats', async (req, res) => {
     const todayAttTotal = Object.values(todayAttMap).reduce((a, b) => a + b, 0);
 
     const [monthAttRows] = await pool.query(
-      "SELECT status, COUNT(*) AS cnt FROM attendance WHERE DATE_FORMAT(attendanceDate, '%Y-%m') = ? GROUP BY status",
+      "SELECT status, COUNT(*) AS cnt FROM attendance WHERE to_char(attendanceDate, 'YYYY-MM') = ? GROUP BY status",
       [monthISO]
     );
     const monthAttMap = Object.fromEntries(monthAttRows.map((r) => [r.status, Number(r.cnt)]));

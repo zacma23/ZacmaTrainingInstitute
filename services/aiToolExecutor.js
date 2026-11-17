@@ -280,7 +280,7 @@ async function executeAssistantTool(toolName, args = {}, user) {
       return { accessDenied: true, reason: 'Global financial KPIs are restricted to Administrators.' };
     }
     const [[stAgg]] = await pool.query(
-      "SELECT COUNT(*) AS total, SUM(status = 'Active') AS active, SUM(status = 'Graduated') AS graduated, SUM(status = 'Suspended') AS suspended FROM students WHERE status != 'Archived'"
+      "SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status = 'Graduated' THEN 1 ELSE 0 END) AS graduated, SUM(CASE WHEN status = 'Suspended' THEN 1 ELSE 0 END) AS suspended FROM students WHERE status != 'Archived'"
     );
     const [[feeAgg]] = await pool.query(
       "SELECT COALESCE(SUM(totalCourseFee), 0) AS expectedTotal FROM enrollments WHERE enrollmentStatus != 'Archived'"
@@ -319,9 +319,9 @@ async function executeAssistantTool(toolName, args = {}, user) {
     const [rows] = await pool.query(
       `SELECT c.name AS courseName,
               COUNT(*) AS totalRecords,
-              SUM(a.status IN ('PRESENT', 'LATE')) AS attendedCount,
-              SUM(a.status = 'ABSENT') AS absentCount,
-              SUM(a.status = 'EXCUSED') AS excusedCount
+              SUM(CASE WHEN a.status IN ('PRESENT', 'LATE') THEN 1 ELSE 0 END) AS attendedCount,
+              SUM(CASE WHEN a.status = 'ABSENT' THEN 1 ELSE 0 END) AS absentCount,
+              SUM(CASE WHEN a.status = 'EXCUSED' THEN 1 ELSE 0 END) AS excusedCount
        FROM attendance a
        JOIN courses c ON c.id = a.courseId
        GROUP BY c.id, c.name

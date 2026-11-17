@@ -1,0 +1,8 @@
+# Local development server settings only.
+# Production build settings (command/publish directory) are configured in the
+# Netlify UI and are intentionally not overridden here.
+[dev]
+  framework = "#custom"
+  command = "node server.js"
+  targetPort = 3000
+  autoLaunch = false

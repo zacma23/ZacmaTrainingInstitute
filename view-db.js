@@ -28,7 +28,7 @@ async function viewDatabase() {
 
     await pool.end();
   } catch (err) {
-    console.error('Failed to inspect MySQL data:', err.message);
+    console.error('Failed to inspect database data:', err.message);
     process.exit(1);
   }
 }

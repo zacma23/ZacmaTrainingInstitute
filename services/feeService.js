@@ -209,7 +209,7 @@ async function generateNextStudentCode(conn) {
   const year = getAddisTodayISO().slice(0, 4);
   const prefix = `ZTI-${year}-`;
   const [[row]] = await conn.query(
-    "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(studentCode, '-', -1) AS UNSIGNED)), 0) AS maxSeq FROM students WHERE studentCode LIKE ? OR studentCode LIKE ?",
+    "SELECT COALESCE(MAX(CAST(substring(studentCode from '[0-9]+$') AS BIGINT)), 0) AS maxSeq FROM students WHERE studentCode LIKE ? OR studentCode LIKE ?",
     [`${prefix}%`, `ASTI-${year}-%`]
   );
   const nextSeq = Number(row.maxSeq || 0) + 1;
@@ -220,7 +220,7 @@ async function generateNextApplicationNumber(conn) {
   const year = getAddisTodayISO().slice(0, 4);
   const prefix = `APP-${year}-`;
   const [[row]] = await conn.query(
-    "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(applicationNumber, '-', -1) AS UNSIGNED)), 0) AS maxSeq FROM registration_applications WHERE applicationNumber LIKE ?",
+    "SELECT COALESCE(MAX(CAST(substring(applicationNumber from '[0-9]+$') AS BIGINT)), 0) AS maxSeq FROM registration_applications WHERE applicationNumber LIKE ?",
     [`${prefix}%`]
   );
   const nextSeq = Number(row.maxSeq || 0) + 1;
@@ -231,7 +231,7 @@ async function generateNextReceiptNumber(conn) {
   const year = getAddisTodayISO().slice(0, 4);
   const prefix = `RCP-${year}-`;
   const [[row]] = await conn.query(
-    "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(receiptNumber, '-', -1) AS UNSIGNED)), 0) AS maxSeq FROM receipts WHERE receiptNumber LIKE ?",
+    "SELECT COALESCE(MAX(CAST(substring(receiptNumber from '[0-9]+$') AS BIGINT)), 0) AS maxSeq FROM receipts WHERE receiptNumber LIKE ?",
     [`${prefix}%`]
   );
   const nextSeq = Number(row.maxSeq || 0) + 1;

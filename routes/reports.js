@@ -250,7 +250,7 @@ async function buildReportData(reportType, queryParams = {}) {
       params.push(courseId);
     }
     if (month) {
-      where += " AND DATE_FORMAT(a.attendanceDate, '%Y-%m') = ?";
+      where += " AND to_char(a.attendanceDate, 'YYYY-MM') = ?";
       params.push(String(month).slice(0, 7));
     }
 

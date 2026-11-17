@@ -156,30 +156,31 @@ async function bootstrap() {
   try {
     await ensureInitialized();
     await runReminderCheck();
-
-    // Run automated payment reminder check every hour in Africa/Addis_Ababa timezone (non-serverless only)
-    if (!process.env.VERCEL) {
-      cron.schedule(
-        '0 * * * *',
-        () => {
-          runReminderCheck().catch((err) =>
-            logger.error('Scheduled reminder check failed', { error: err.message })
-          );
-        },
-        { timezone: 'Africa/Addis_Ababa' }
-      );
-    }
-
-    app.listen(PORT, HOST, () => {
-      logger.info(`BirrLedger Student Fee Management System listening on http://${HOST}:${PORT}`, {
-        timezone: process.env.TZ,
-        env: process.env.NODE_ENV || 'development',
-      });
-    });
   } catch (err) {
-    logger.error('Fatal startup error', { error: err.message });
-    process.exit(1);
+    // Keep serving static files & degraded API responses even if the database
+    // is not reachable yet (migrations may still be applying during deploys).
+    logger.error('Database initialization failed; serving in degraded mode', { error: err.message });
   }
+
+  // Run automated payment reminder check every hour in Africa/Addis_Ababa timezone (non-serverless only)
+  if (!process.env.VERCEL && !process.env.NETLIFY) {
+    cron.schedule(
+      '0 * * * *',
+      () => {
+        runReminderCheck().catch((err) =>
+          logger.error('Scheduled reminder check failed', { error: err.message })
+        );
+      },
+      { timezone: 'Africa/Addis_Ababa' }
+    );
+  }
+
+  app.listen(PORT, HOST, () => {
+    logger.info(`BirrLedger Student Fee Management System listening on http://${HOST}:${PORT}`, {
+      timezone: process.env.TZ,
+      env: process.env.NODE_ENV || 'development',
+    });
+  });
 }
 
 if (require.main === module) {

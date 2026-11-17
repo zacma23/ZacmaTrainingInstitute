@@ -330,7 +330,7 @@ router.patch('/:id/read', async (req, res) => {
     const pool = getPool();
     const scope = buildScopeSql(req.user);
     await pool.query(
-      `UPDATE notifications n SET n.isRead = 1, n.readAt = NOW(), n.readByUserId = ?
+      `UPDATE notifications n SET isRead = 1, readAt = NOW(), readByUserId = ?
        WHERE n.id = ? AND ${scope.sql}`,
       [req.user.id, req.params.id, ...scope.params]
     );
@@ -346,7 +346,7 @@ router.patch('/read-all', async (req, res) => {
     const pool = getPool();
     const scope = buildScopeSql(req.user);
     await pool.query(
-      `UPDATE notifications n SET n.isRead = 1, n.readAt = NOW(), n.readByUserId = ?
+      `UPDATE notifications n SET isRead = 1, readAt = NOW(), readByUserId = ?
        WHERE n.isRead = 0 AND ${scope.sql}`,
       [req.user.id, ...scope.params]
     );

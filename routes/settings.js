@@ -71,7 +71,7 @@ router.put('/', requireRole('admin'), async (req, res) => {
         await pool.query(
           `INSERT INTO settings (settingKey, settingValue, updatedBy)
            VALUES (?, ?, ?)
-           ON DUPLICATE KEY UPDATE settingValue = VALUES(settingValue), updatedBy = VALUES(updatedBy)`,
+           ON CONFLICT (settingKey) DO UPDATE SET settingValue = EXCLUDED.settingValue, updatedBy = EXCLUDED.updatedBy`,
           [key, String(updates[key]).trim(), req.user.username]
         );
       }

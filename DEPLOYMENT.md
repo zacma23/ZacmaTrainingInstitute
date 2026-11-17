@@ -1,36 +1,37 @@
 # Production Deployment Guide — BirrLedger Student Fee Management System
 
-## Option A: Hosting on Vercel (Recommended Cloud Deployment)
+## Option A: Hosting on Netlify (Recommended Cloud Deployment)
 
-This repository includes `api/index.js` and `vercel.json` configured for **Vercel Serverless Functions + Edge Static CDN**.
+The application deploys to Netlify with a static frontend build (`bun run build` → `dist/`) and the Express
+API running as a **Netlify Server** (`netlify/server/index.mjs`), backed by **Netlify Database** (managed Postgres).
 
-1. **Managed Cloud MySQL Database**:
-   Vercel serverless functions require an externally reachable MySQL/MariaDB server (e.g., **TiDB Cloud Serverless**, **Aiven**, **Railway**, **AWS RDS**, or **DigitalOcean Managed MySQL**).
-   - Either set `DATABASE_URL` (e.g. `mysql://user:pass@host:4000/sfmt_ethiopia?ssl-mode=REQUIRED`)
-   - Or set `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, and `DB_SSL=true` (plus `DB_SSL_CA` if your provider requires a custom CA certificate).
-   - On first API request, `api/index.js` automatically applies `sql/schema.sql`, runs schema upgrades, and seeds baseline roles/courses/plans. After initial provisioning, you can optionally set `DB_SKIP_SCHEMA_SYNC=true` for faster cold starts.
+1. **Database**: Netlify Database is provisioned and connected automatically — no connection string or
+   environment variables are required. SQL migrations in `netlify/database/migrations/` are applied
+   automatically before each deploy is published. Baseline roles, settings, payment plans, and the default
+   course catalog are seeded on first API request.
 
-2. **Required Vercel Environment Variables**:
-   - `DATABASE_URL` (or `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSL`)
+2. **Required Netlify Environment Variables**:
    - `JWT_SECRET` (generate with `openssl rand -hex 32`)
-   - `NODE_ENV=production`
-   - `TZ=Africa/Addis_Ababa`
    - `GEMINI_API_KEY` (required if using the Operations & Fee Assistant chatbot)
    - `CRON_SECRET` (optional bearer token protecting `GET /api/cron/reminders`)
+   - `ADMIN_INIT_USERNAME` / `ADMIN_INIT_PASSWORD` (optional bootstrap; otherwise use the First-Time Setup screen)
    - `FIREBASE_SERVICE_ACCOUNT_JSON` (optional Firebase Admin JSON or base64 string)
 
 3. **Firebase Google Sign-In Domain Allowlist**:
-   Add your deployed Vercel domain (`your-app.vercel.app`) in **Firebase Console → Authentication → Settings → Authorized domains**.
+   Add your deployed Netlify domain (`your-site.netlify.app`) in **Firebase Console → Authentication → Settings → Authorized domains**.
 
-4. **Automated Reminders on Vercel**:
-   External/Vercel Cron can call `GET https://your-app.vercel.app/api/cron/reminders` daily with header `Authorization: Bearer <CRON_SECRET>`.
+4. **Automated Reminders**: A scheduled function (`netlify/functions/reminder-check.mjs`) runs the payment
+   reminder scan hourly. External schedulers can also call `GET /api/cron/reminders` with
+   `Authorization: Bearer <CRON_SECRET>`.
 
 ---
 
-## Option B: Linux VPS / Self-Hosted Hosting
-This application requires **Node.js 20+**, **MySQL 8.0+ / MariaDB 10.6+**, and a persistent process manager (**PM2**).
+## Option B: Linux VPS / Self-Hosted Hosting (Advanced — requires a managed Postgres)
+
+This application requires **Node.js 22+**, a reachable **PostgreSQL** database (Netlify Database is not
+available off-platform), and a persistent process manager (**PM2**).
 - **Recommended:** Ubuntu 22.04/24.04 or Debian 12 VPS (DigitalOcean, Hetzner, AWS EC2, Ethio Telecom Cloud, or on-premise institute server).
-- **Important Note on Shared cPanel Hosting:** Standard shared cPanel hosting often restricts long-lived Node.js processes, `node-cron` background timers, outbound messaging webhooks, or `mysql2` connection pooling. Verify that your hosting plan explicitly supports **Node.js App Manager (Passenger) or SSH/PM2 access** before deploying on cPanel; otherwise deploy on Vercel or a Linux VPS.
+- **Important Note on Shared cPanel Hosting:** Standard shared cPanel hosting often restricts long-lived Node.js processes, background timers, outbound messaging webhooks, or database connection pooling. Verify that your hosting plan explicitly supports **Node.js App Manager (Passenger) or SSH/PM2 access** before deploying on cPanel; otherwise deploy on Netlify or a Linux VPS.
 
 ## 2. Server Preparation (Ubuntu / Debian VPS)
 ```bash
@@ -40,17 +41,19 @@ sudo apt-get update && sudo apt-get install -y nodejs mariadb-server nginx
 sudo npm install -g pm2
 ```
 
-## 3. MySQL Database Provisioning
+## 3. Postgres Database Provisioning
 ```bash
-sudo mysql -e "CREATE DATABASE IF NOT EXISTS sfmt_ethiopia CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-sudo mysql -e "CREATE USER IF NOT EXISTS 'sfmt_app'@'127.0.0.1' IDENTIFIED BY 'STRONG_UNIQUE_PASSWORD';"
-sudo mysql -e "GRANT ALL PRIVILEGES ON sfmt_ethiopia.* TO 'sfmt_app'@'127.0.0.1'; FLUSH PRIVILEGES;"
+sudo -u postgres psql -c "CREATE DATABASE sfmt_ethiopia;"
+sudo -u postgres psql -c "CREATE USER sfmt_app WITH PASSWORD 'STRONG_UNIQUE_PASSWORD';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE sfmt_ethiopia TO sfmt_app;"
 ```
 
-Import the schema directly or let the initializer apply it:
+Apply the schema from the generated migration files:
 ```bash
-mysql -u sfmt_app -p sfmt_ethiopia < sql/schema.sql
+psql -U sfmt_app -d sfmt_ethiopia -f netlify/database/migrations/20261117170613_create_initial_schema/migration.sql
+psql -U sfmt_app -d sfmt_ethiopia -f netlify/database/migrations/20261117170614_add_updated_at_triggers/migration.sql
 ```
+Set `NETLIFY_DB_URL=postgres://sfmt_app:...@127.0.0.1:5432/sfmt_ethiopia` so the server can connect.
 
 ## 4. Environment Configuration (`.env`)
 ```bash
@@ -60,7 +63,7 @@ Edit `.env` with secure production values:
 - `NODE_ENV=production`
 - `PORT=3000`
 - `TZ=Africa/Addis_Ababa`
-- `DB_HOST=127.0.0.1`, `DB_USER=sfmt_app`, `DB_PASSWORD=<strong-password>`, `DB_NAME=sfmt_ethiopia`
+- `NETLIFY_DB_URL=postgres://sfmt_app:<strong-password>@127.0.0.1:5432/sfmt_ethiopia`
 - `JWT_SECRET=$(openssl rand -hex 32)`
 - Leave `ADMIN_INIT_PASSWORD` blank if you prefer setting up the first administrator via the web First-Time Setup screen (`POST /api/auth/setup-admin`), OR set `ADMIN_INIT_USERNAME` / `ADMIN_INIT_PASSWORD` before running `npm run db:init` and remove `ADMIN_INIT_PASSWORD` afterwards.
 
@@ -106,7 +109,7 @@ sudo certbot --nginx -d fees.yourinstitute.edu.et
 - Application logs: `./logs/app.log`
 - Error logs: `./logs/error.log`
 - PM2 logs: `./logs/pm2-out.log` and `./logs/pm2-error.log`
-- Health probe endpoint: `GET /api/health` (returns HTTP 200 when MySQL pool is healthy, HTTP 503 if degraded).
+- Health probe endpoint: `GET /api/health` (returns HTTP 200 when the database pool is healthy, HTTP 503 if degraded).
 
 ## 9. Backup & Recovery
 Schedule daily automated backups via cron (`crontab -e`):
@@ -115,5 +118,5 @@ Schedule daily automated backups via cron (`crontab -e`):
 ```
 To restore from backup:
 ```bash
-gunzip -c backups/sfmt_ethiopia_YYYYMMDD_HHMMSS.sql.gz | mysql -u sfmt_app -p sfmt_ethiopia
+gunzip -c backups/sfmt_ethiopia_YYYYMMDD_HHMMSS.sql.gz | psql -U sfmt_app -d sfmt_ethiopia
 ```
