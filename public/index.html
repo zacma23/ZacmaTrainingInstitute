@@ -3,19 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BirrLedger — Student Fee Management System</title>
+    <title>Zacma Training Institute | Management Workspace</title>
     <meta name="description" content="Production Role-Based Student Registration, Fee Payment, Installment Scheduling, Attendance, Receipting & Reporting System for Ethiopian Short-Term Training Institutes." />
-    <meta property="og:title" content="BirrLedger — Student Fee Management System" />
+    <meta property="og:title" content="Zacma Training Institute | Management Workspace" />
     <meta property="og:description" content="Production Role-Based Student Registration, Fee Payment, Installment Scheduling, Attendance, Receipting & Reporting System for Ethiopian Short-Term Training Institutes." />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/workspace.css" />
   </head>
   <body>
+    <a class="skip-link" href="#workspaceMain">Skip to content</a>
     <!-- Authentication Screen -->
     <div id="authScreen" class="auth-screen">
+      <div class="auth-story" aria-label="Zacma workspace introduction">
+        <span class="eyebrow">ZACMA / TRAINING INSTITUTE</span>
+        <h2>Great learning.<br />Well managed.</h2>
+        <p>Bring your people, programs, and payments together. Make more room for what matters: your students.</p>
+        <div class="auth-story-grid"><span><i data-lucide="graduation-cap"></i> Student administration</span><span><i data-lucide="wallet"></i> Financial clarity</span><span><i data-lucide="shield-check"></i> Role-based workspace</span></div>
+        <div class="auth-story-footer">Built around your institute <span>ADDIS ABABA · ETB</span></div>
+      </div>
       <div class="auth-card">
         <div class="auth-brand">
           <div class="logo-box">
@@ -25,8 +34,8 @@
             </div>
           </div>
           <div>
-            <h1 id="authInstituteName">Zacma Technology Institute</h1>
-            <p class="auth-subtitle">Student Fee Management &amp; Accounting Portal</p>
+            <h1 id="authInstituteName">Zacma Training Institute</h1>
+            <p class="auth-subtitle">Your institute. One connected workspace.</p>
           </div>
         </div>
 
@@ -50,7 +59,7 @@
         <!-- First-Time Setup Form (Shown only when 0 users exist in MySQL) -->
         <form id="setupAdminForm" class="auth-form" style="display:none;">
           <div class="setup-notice">
-            No administrator account found in MySQL. Create your primary Administrator account to initialize the system.
+            Create your primary administrator account to get started.
           </div>
           <div class="form-group">
             <label for="setupFullName">Administrator Full Name</label>
@@ -107,12 +116,14 @@
             <div class="sidebar-logo-fallback" style="display:none;"><i data-lucide="landmark"></i></div>
           </div>
           <div class="sidebar-brand-text">
-            <div id="sidebarBrandTitle" class="brand-title">BirrLedger</div>
-            <div id="sidebarBrandSub" class="brand-sub">ZTI Ethiopia</div>
+            <div id="sidebarBrandTitle" class="brand-title">ZACMA</div>
+            <div id="sidebarBrandSub" class="brand-sub">Training Institute</div>
           </div>
         </div>
 
-        <nav class="sidebar-nav" id="sidebarNav">
+        <div class="nav-search-wrap"><i data-lucide="search"></i><input id="navigationSearch" type="search" placeholder="Find a module…" aria-label="Search navigation" autocomplete="off" /><kbd>/</kbd></div>
+        <p id="navigationEmpty" class="navigation-empty" role="status" hidden>No matching modules</p>
+        <nav class="sidebar-nav" id="sidebarNav" aria-label="Workspace navigation">
           <!-- ADMIN NAVIGATION -->
           <div id="adminNavGroup" class="role-nav-group admin-only">
             <div class="role-nav-label">Administrator Portal</div>
@@ -173,7 +184,7 @@
             </button>
             <button type="button" class="nav-item" data-page="users">
               <i data-lucide="shield"></i>
-              <span>Accountant Management</span>
+              <span>User Management</span>
             </button>
             <button type="button" class="nav-item" data-page="audit-logs">
               <i data-lucide="history"></i>
@@ -185,7 +196,7 @@
             </button>
             <button type="button" class="nav-item" data-page="assistant">
               <i data-lucide="sparkles"></i>
-              <span>AI Assistance Suite</span>
+              <span>Zacma AI Assistant</span>
             </button>
           </div>
 
@@ -227,7 +238,7 @@
             </button>
             <button type="button" class="nav-item" data-page="assistant">
               <i data-lucide="sparkles"></i>
-              <span>AI Assistance Suite</span>
+              <span>Zacma AI Assistant</span>
             </button>
           </div>
         </nav>
@@ -264,6 +275,7 @@
             <span>ETB Currency</span>
           </div>
           <div class="topbar-actions">
+            <button type="button" id="appearanceToggle" class="icon-btn" aria-label="Switch to dark mode" aria-pressed="false"><i data-lucide="moon"></i></button>
             <button type="button" id="quickStudentLookupBtn" class="btn btn-secondary btn-sm">
               <i data-lucide="search"></i>
               <span>Search Student / ID</span>
@@ -279,7 +291,7 @@
           </div>
         </header>
 
-        <main class="viewport">
+        <main class="viewport" id="workspaceMain" tabindex="-1">
           <div id="firestoreErrorBanner" class="inline-error" style="display:none; margin-bottom:16px;"></div>
           <!-- ==================== ADMIN PAGES ==================== -->
 
@@ -287,8 +299,8 @@
           <section id="page-dashboard" class="page active">
             <div class="page-head">
               <div>
-                <h2>Administrator Financial &amp; Operations Overview</h2>
-                <p>Verified revenue, student enrollments, pending approval queues, and attendance metrics from MySQL.</p>
+                <h2>Institute overview</h2>
+                <p>A clear view of your students, finances, and daily operations.</p>
               </div>
               <div class="page-head-actions">
                 <button type="button" id="refreshDashboardBtn" class="btn btn-secondary btn-sm">
@@ -298,6 +310,7 @@
               </div>
             </div>
 
+            <div id="dashboardLoadStatus" class="dashboard-load-status" role="status" hidden></div>
             <div class="kpi-grid-12" id="dashboardKpiGrid"></div>
 
             <div class="charts-grid">
@@ -3102,5 +3115,6 @@
     <script src="/js/firebase-bundle.js"></script>
     <script src="/js/ai-tools.js"></script>
     <script src="/app.js"></script>
+    <script src="/js/workspace.js"></script>
   </body>
 </html>
