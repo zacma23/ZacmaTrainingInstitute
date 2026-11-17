@@ -31,7 +31,7 @@ const PAGE_TITLES = {
   attendance: 'Attendance Management',
   notifications: 'Notifications',
   reports: 'Reports & Exports',
-  users: 'Accountant Management',
+  users: 'User Management',
   'audit-logs': 'Audit Logs',
   settings: 'System Settings',
   'acc-dashboard': 'Accountant Dashboard',
@@ -41,7 +41,7 @@ const PAGE_TITLES = {
   'acc-registrations': 'Registration History',
   'acc-payments': 'Payment History',
   'acc-profile': 'My Profile',
-  assistant: 'AI Assistance Suite',
+  assistant: 'Zacma AI Assistant',
 };
 
 const ADMIN_PAGES = new Set([
@@ -608,6 +608,11 @@ async function refreshRoleBadges() {
 
 // ================= ADMIN 1. DASHBOARD =================
 async function loadDashboard() {
+  const loadStatus = document.getElementById('dashboardLoadStatus');
+  loadStatus.hidden = false;
+  loadStatus.classList.remove('is-error');
+  loadStatus.textContent = 'Loading the latest institute activity…';
+  document.getElementById('dashboardKpiGrid').setAttribute('aria-busy', 'true');
   try {
     const data = await apiJson('/api/dashboard/stats');
     if (data.role !== 'admin') return;
@@ -640,6 +645,7 @@ async function loadDashboard() {
       )
       .join('');
 
+    loadStatus.hidden = true;
     renderDashboardCharts(data.charts);
 
     const outBody = document.getElementById('dashOutstandingBody');
@@ -726,7 +732,12 @@ async function loadDashboard() {
     }
     refreshRoleBadges();
   } catch (err) {
+    loadStatus.hidden = false;
+    loadStatus.classList.add('is-error');
+    loadStatus.textContent = 'The latest overview could not be loaded. Previously displayed figures may be out of date. Use Refresh to try again.';
     showToast(err.message, 'error');
+  } finally {
+    document.getElementById('dashboardKpiGrid').setAttribute('aria-busy', 'false');
   }
 }
 
@@ -743,7 +754,7 @@ function renderDashboardCharts(charts) {
         {
           label: 'Collected (ETB)',
           data: charts.monthlyCollection.map((m) => m.collected),
-          backgroundColor: '#047857',
+          backgroundColor: '#527be4',
           borderRadius: 4,
         },
       ],
@@ -786,7 +797,7 @@ function renderDashboardCharts(charts) {
         {
           label: 'Students',
           data: charts.courseDistribution.map((c) => c.studentCount),
-          backgroundColor: '#0f172a',
+          backgroundColor: '#7594da',
           borderRadius: 4,
         },
       ],

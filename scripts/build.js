@@ -57,9 +57,9 @@ for (const rel of requiredPaths) {
   }
 }
 
-// 4. Copy static public assets into dist/public for production static deployment verification
+// 4. Publish the existing static application at the configured dist root
 fs.rmSync(distDir, { recursive: true, force: true });
-fs.mkdirSync(path.join(distDir, 'public'), { recursive: true });
-fs.cpSync(path.join(rootDir, 'public'), path.join(distDir, 'public'), { recursive: true });
+fs.mkdirSync(distDir, { recursive: true });
+fs.cpSync(path.join(rootDir, 'public'), distDir, { recursive: true });
 
-console.log('Production verification build completed cleanly -> public/vendor & dist/public');
+console.log('Production verification build completed cleanly -> public/vendor & dist');
