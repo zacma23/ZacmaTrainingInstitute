@@ -95,6 +95,7 @@ function getDbConfig() {
 
 function ensureLocalMariaDbRunning(host) {
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) return;
+  if (process.env.NODE_ENV === 'production' || process.env.DB_SKIP_LOCAL_AUTOSTART === 'true') return;
   if (host !== '127.0.0.1' && host !== 'localhost') return;
 
   try {

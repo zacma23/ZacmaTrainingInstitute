@@ -29,10 +29,34 @@ This repository includes `api/index.js` and `vercel.json` configured for **Verce
 
 ---
 
-## Option B: Linux VPS / Self-Hosted Hosting
+## Option B: Hosting on Hostinger (Node.js Web App or Hostinger VPS)
+
+### Hostinger Managed Node.js Web App (GitHub Integration)
+1. **Repository & Build Settings**:
+   - **Node.js Version**: `20.x` or `22.x`
+   - **Build Command**: `npm run build`
+   - **Start Command / Entry Point**: `npm start` (`server.js`)
+2. **Hostinger MySQL Database**:
+   - Create a MySQL database & user in **hPanel → Databases → Management**.
+   - Set **Environment Variables** in Hostinger hPanel:
+     - `NODE_ENV=production`
+     - `TZ=Africa/Addis_Ababa`
+     - `DB_HOST=<your-hostinger-mysql-host>` (e.g. `127.0.0.1` or `auth-db*.hstgr.io`)
+     - `DB_PORT=3306`
+     - `DB_USER=<hostinger_db_user>`
+     - `DB_PASSWORD=<hostinger_db_password>`
+     - `DB_NAME=<hostinger_db_name>`
+     - `JWT_SECRET=<random-64-char-hex-secret>`
+     - Optional: `GEMINI_API_KEY`, `ADMIN_INIT_USERNAME`, `ADMIN_INIT_PASSWORD`
+3. **Firebase Google Sign-In Domain Allowlist**:
+   - Add your Hostinger domain (e.g. `yourdomain.com` and `www.yourdomain.com`) in **Firebase Console → Authentication → Settings → Authorized domains**.
+4. **Verify**: Visit `https://yourdomain.com/api/health` and confirm HTTP `200` (`"status": "ok"`).
+
+---
+
+## Option C: Linux VPS (Hostinger VPS / Ubuntu / Debian)
 This application requires **Node.js 20+**, **MySQL 8.0+ / MariaDB 10.6+**, and a persistent process manager (**PM2**).
-- **Recommended:** Ubuntu 22.04/24.04 or Debian 12 VPS (DigitalOcean, Hetzner, AWS EC2, Ethio Telecom Cloud, or on-premise institute server).
-- **Important Note on Shared cPanel Hosting:** Standard shared cPanel hosting often restricts long-lived Node.js processes, `node-cron` background timers, outbound messaging webhooks, or `mysql2` connection pooling. Verify that your hosting plan explicitly supports **Node.js App Manager (Passenger) or SSH/PM2 access** before deploying on cPanel; otherwise deploy on Vercel or a Linux VPS.
+- **Recommended:** Ubuntu 22.04/24.04 or Debian 12 VPS (Hostinger KVM VPS, DigitalOcean, Hetzner, AWS EC2, Ethio Telecom Cloud, or on-premise institute server).
 
 ## 2. Server Preparation (Ubuntu / Debian VPS)
 ```bash

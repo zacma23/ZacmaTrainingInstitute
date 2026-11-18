@@ -12,7 +12,7 @@ const compression = require('compression');
 const logger = require('./config/logger');
 const { initDatabase, checkDbHealth } = require('./config/db');
 const { apiLimiter, isJwtConfigured } = require('./middleware/auth');
-const { ensureBaselineCatalog } = require('./services/seedService');
+const { ensureBaselineCatalog, seedRealisticEthiopianData } = require('./services/seedService');
 const { runReminderCheck } = require('./services/reminderService');
 
 const authRoutes = require('./routes/auth');
@@ -60,6 +60,12 @@ if (!process.env.VERCEL) {
     })
   );
 }
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  }
+  next();
+});
 app.use(cors());
 app.use(express.json({ limit: '8mb' }));
 
@@ -169,6 +175,12 @@ async function ensureInitialized() {
     initPromise = (async () => {
       await initDatabase();
       await ensureBaselineCatalog();
+      if (String(process.env.SEED_DEMO_ON_EMPTY || '').toLowerCase() === 'true') {
+        const res = await seedRealisticEthiopianData();
+        if (res && !res.skipped) {
+          await runReminderCheck();
+        }
+      }
     })().catch((err) => {
       initPromise = null;
       throw err;
